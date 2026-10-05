@@ -67,11 +67,6 @@ jobs:
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha
       - if: github.event_name == 'push'
-        name: Verify private package visibility
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: test "$(gh api "/users/$GITHUB_REPOSITORY_OWNER/packages/container/easywords.me" --jq .visibility)" = private
-      - if: github.event_name == 'push'
         name: Write the image pin
         env:
           IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}@${{ steps.push.outputs.digest }}

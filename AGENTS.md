@@ -35,6 +35,6 @@ Copy `.env.example` to `.env` for `make dev`. Never commit or print token values
 
 ## Shipping
 
-- The repo is public so CI minutes are free. The image `ghcr.io/davidorbelian/easywords.me` stays private.
+- The repo is public so CI minutes are free. GHCR gives the image `ghcr.io/davidorbelian/easywords.me` the repo's visibility, so it is public too. It holds no secrets.
 - CI runs on pushes to main and on PRs. On main it pushes the image and writes the `tag@digest` pin to the job summary.
 - `davidorbelian/infra` owns DNS, secrets, the server and the image pin. This repo only builds the image.
