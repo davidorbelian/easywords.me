@@ -137,21 +137,21 @@ main {
   flex-wrap: wrap;
 }
 
-.styles {
+.personalities {
   display: inline-flex;
   flex-wrap: wrap;
   padding: 3px;
   border: 1px solid var(--border);
-  /* Round like a pill on one row, and still neat when many styles wrap to more rows. */
+  /* Round like a pill on one row, and still neat when many personalities wrap to more rows. */
   border-radius: 21px;
   background: var(--surface);
 }
 
-.styles label {
+.personalities label {
   position: relative;
 }
 
-.styles input {
+.personalities input {
   position: absolute;
   inset: 0;
   opacity: 0;
@@ -159,7 +159,7 @@ main {
   cursor: pointer;
 }
 
-.styles span {
+.personalities span {
   display: block;
   padding: 6px 16px;
   border-radius: 999px;
@@ -171,16 +171,16 @@ main {
     color 0.15s;
 }
 
-.styles input:hover + span {
+.personalities input:hover + span {
   color: var(--text);
 }
 
-.styles input:checked + span {
+.personalities input:checked + span {
   background: var(--accent);
   color: var(--on-accent);
 }
 
-.styles input:focus-visible + span {
+.personalities input:focus-visible + span {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -432,12 +432,12 @@ textarea[aria-busy="true"] {
     align-items: stretch;
   }
 
-  .styles {
+  .personalities {
     display: flex;
     text-align: center;
   }
 
-  .styles label {
+  .personalities label {
     flex: 1 1 6.5rem;
   }
 

@@ -4,8 +4,8 @@ export type Rewriter = (text: string, systemPrompt: string, signal: AbortSignal)
 
 const MODEL = "claude-sonnet-5-5";
 
-export function systemPrompt(rules: string, stylePrompt: string): string {
-  return [rules.trim(), stylePrompt.trim()].filter(Boolean).join("\n\n");
+export function systemPrompt(rules: string, personalityPrompt: string): string {
+  return [rules.trim(), personalityPrompt.trim()].filter(Boolean).join("\n\n");
 }
 
 export function createClaudeRewriter(oauthToken: string, baseUrl: string | undefined): Rewriter {

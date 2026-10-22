@@ -2,14 +2,16 @@ import { MAX_INPUT_CHARS } from "../shared/rules.ts";
 import { readEvents } from "./events.ts";
 
 const SCORE_DELAY_MS = 500;
-const STYLE_KEY = "easywords.style";
+const PERSONALITY_KEY = "easywords.personality";
+// Where the choice was kept before personalities were called styles.
+const OLD_KEY = "easywords.style";
 
 const MESSAGES: Record<string, string> = {
   empty: "Paste some text first. We can't roast nothing.",
   too_long: `Nobody reads that much, not even us. Keep it under ${MAX_INPUT_CHARS.toLocaleString("en")} characters.`,
   daily_limit: "That's enough truth for one day. Come back tomorrow.",
   busy: "Too many people are being rude right now. Try again in a moment.",
-  bad_style: "That style is gone. Reload the page for the new ones.",
+  bad_personality: "That personality is gone. Reload the page for the new ones.",
   failed: "Well, shit. We broke it. Please try again.",
 };
 
@@ -25,7 +27,7 @@ const count = element<HTMLSpanElement>("count");
 const status = element<HTMLSpanElement>("status");
 const run = element<HTMLButtonElement>("run");
 const copy = element<HTMLButtonElement>("copy");
-const styles = document.querySelectorAll<HTMLInputElement>('input[name="style"]');
+const personalities = document.querySelectorAll<HTMLInputElement>('input[name="personality"]');
 
 let scoreRequest: AbortController | undefined;
 let scoreTimer: ReturnType<typeof setTimeout> | undefined;
@@ -52,8 +54,8 @@ function showStatus(text: string, tone: "info" | "error" = "info"): void {
   status.dataset.tone = tone;
 }
 
-function selectedStyle(): string {
-  return document.querySelector<HTMLInputElement>('input[name="style"]:checked')?.value ?? "";
+function selectedPersonality(): string {
+  return document.querySelector<HTMLInputElement>('input[name="personality"]:checked')?.value ?? "";
 }
 
 function updateCount(): void {
@@ -131,7 +133,7 @@ async function simplify(): Promise<void> {
     const response = await fetch("/api/simplify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, style: selectedStyle() }),
+      body: JSON.stringify({ text, personality: selectedPersonality() }),
       signal: request.signal,
     });
     if (!response.ok) {
@@ -173,14 +175,14 @@ async function simplify(): Promise<void> {
   }
 }
 
-function restoreStyle(): void {
+function restorePersonality(): void {
   let saved: string | null = null;
   try {
-    saved = localStorage.getItem(STYLE_KEY);
+    saved = localStorage.getItem(PERSONALITY_KEY) ?? localStorage.getItem(OLD_KEY);
   } catch {
-    // Storage can be blocked; the first style is fine then.
+    // Storage can be blocked; the first personality is fine then.
   }
-  const radio = [...styles].find((style) => style.value === saved);
+  const radio = [...personalities].find((personality) => personality.value === saved);
   if (radio) radio.checked = true;
 }
 
@@ -199,12 +201,12 @@ input.addEventListener("paste", () => {
   });
 });
 
-for (const radio of styles) {
+for (const radio of personalities) {
   radio.addEventListener("change", () => {
     try {
-      localStorage.setItem(STYLE_KEY, radio.value);
+      localStorage.setItem(PERSONALITY_KEY, radio.value);
     } catch {
-      // Not remembering the style is fine.
+      // Not remembering the personality is fine.
     }
     if (input.value.trim()) void simplify();
   });
@@ -235,5 +237,5 @@ if (matchMedia("(pointer: fine)").matches) {
   run.querySelector(".run-keys")!.textContent = isMac ? "⌘↵" : "Ctrl ↵";
 }
 
-restoreStyle();
+restorePersonality();
 updateCount();
