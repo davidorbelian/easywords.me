@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Admin } from "../src/server/admin.ts";
 import { createApp, defaultLimits, type Limits } from "../src/server/app.ts";
+import { BUILD_PROMPT, buildInput } from "../src/server/build.ts";
 import type { Rewriter } from "../src/server/claude.ts";
 import type { Scorer } from "../src/server/jev.ts";
 import { DailyCap, Slots, WindowLimit } from "../src/server/limits.ts";
@@ -167,7 +168,7 @@ describe("GET /", () => {
   });
 
   it("escapes personality names", async () => {
-    await store.save({ rules: "", personalities: [{ name: '<b>"Bold"</b>', prompt: "p" }] }, 1);
+    await store.save({ rules: "", personalities: [{ name: '<b>"Bold"</b>', prompt: "p", messages: "" }] }, 1);
     expect(await (await app().request("/")).text()).toContain("&#60;b&#62;&#34;Bold&#34;&#60;/b&#62;");
   });
 
@@ -264,7 +265,10 @@ describe("admin", () => {
 
   it("saves a new version that users get at once", async () => {
     const { instance, cookie, token } = await signIn();
-    const personalities = [{ name: "Pirate", prompt: "Voice: a pirate." }, ...store.current().personalities];
+    const personalities = [
+      { name: "Pirate", prompt: "Voice: a pirate.", messages: "" },
+      ...store.current().personalities,
+    ];
     const response = await instance.request(put({ basedOn: 1, rules: "Be rude.", personalities }, cookie, token));
     expect(response.status).toBe(200);
     const { versions } = (await response.json()) as { versions: { number: number; personalities: { id: string }[] }[] };
@@ -319,6 +323,66 @@ describe("admin", () => {
     expect(await response.text()).toContain('event: done\ndata: {"score":4}');
     expect(seen).toBe("Rules.\n\nVoice: a pirate.");
     expect(store.current().number).toBe(1);
+  });
+
+  describe("POST /api/admin/build", () => {
+    const body = { rules: "Rules.", name: "", prompt: "", messages: "lol ok" };
+
+    async function build(rewriter: Rewriter, sent: unknown = body) {
+      const { instance, cookie, token } = await signIn(app({ rewriter }));
+      return instance.request(post("/api/admin/build", sent, "1.2.3.4", { Cookie: cookie, "X-Form-Token": token }));
+    }
+
+    it("answers the name and the prompt Claude wrote, and saves nothing", async () => {
+      let seen = { text: "", system: "" };
+      const spy: Rewriter = async function* (text, system) {
+        seen = { text, system };
+        yield "Name: Chill ";
+        yield "Guy\nVoice: lol ok.";
+      };
+      const response = await build(spy, { ...body, name: "Old", prompt: "Voice: old." });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ name: "Chill Guy", prompt: "Voice: lol ok." });
+      expect(seen.system).toBe(BUILD_PROMPT);
+      expect(seen.text).toBe(buildInput("Rules.", "Old", "Voice: old.", "lol ok"));
+      expect(store.current().number).toBe(1);
+    });
+
+    it.each([
+      [{ ...body, messages: " " }, "empty"],
+      [{ ...body, messages: "m".repeat(20001) }, "too_long"],
+      [{ ...body, prompt: undefined }, "bad_prompt"],
+    ])("refuses %j", async (sent, error) => {
+      const response = await build(rewriter, sent);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error });
+    });
+
+    it.each([
+      [
+        "fails",
+        async function* () {
+          yield "Name: X\n";
+          throw new Error("Claude failed");
+        } satisfies Rewriter,
+      ],
+      [
+        "answers in another shape",
+        async function* () {
+          yield "Sure! Here is a prompt.";
+        } satisfies Rewriter,
+      ],
+    ])("says the build failed when Claude %s", async (_, failing) => {
+      const response = await build(failing);
+      expect(response.status).toBe(502);
+      expect(await response.json()).toEqual({ error: "build_failed" });
+    });
+
+    it("needs the form token", async () => {
+      const { instance, cookie } = await signIn();
+      const response = await instance.request(post("/api/admin/build", body, "1.2.3.4", { Cookie: cookie }));
+      expect(response.status).toBe(403);
+    });
   });
 
   it("signs out", async () => {
