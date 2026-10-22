@@ -1,0 +1,333 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.card h1,
+.card h2 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 650;
+}
+
+.card-head,
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 30px;
+}
+
+.hint {
+  margin: -6px 0 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.card textarea,
+.card input,
+.card select {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-sunk);
+  color: var(--text);
+  font: inherit;
+}
+
+.card textarea {
+  flex: none;
+  min-height: 96px;
+  padding: 10px 12px;
+  font-size: 0.9375rem;
+  overflow: hidden;
+}
+
+.card input {
+  height: 38px;
+  padding: 0 12px;
+}
+
+.card select {
+  height: 30px;
+  max-width: 50%;
+  padding: 0 8px;
+  font-size: 0.875rem;
+}
+
+.card textarea:focus,
+.card input:focus,
+.card select:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+
+.card .count {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.signin {
+  width: 100%;
+  max-width: 360px;
+  margin: 12vh auto 0;
+}
+
+.signin h1 {
+  font-size: 1.125rem;
+}
+
+.signin label {
+  margin-bottom: -4px;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.signin .run {
+  justify-content: center;
+}
+
+.status:empty {
+  display: none;
+}
+
+.signin .status,
+.card-status {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 400px);
+  align-items: start;
+  gap: 12px;
+}
+
+.editor-main,
+.editor-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* Short enough to stay in view above the save bar, so Try is at hand next to any style. */
+.editor-side {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100dvh - 112px);
+  overflow-y: auto;
+}
+
+.style-list,
+.versions {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.style-list {
+  gap: 12px;
+}
+
+.style-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.style-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.style-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 650;
+}
+
+.style-id {
+  color: var(--muted);
+  font:
+    0.8125rem ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  white-space: nowrap;
+}
+
+.style-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.style-actions .copy {
+  min-width: 30px;
+  padding: 0 10px;
+}
+
+.style-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -2px;
+}
+
+.try-text {
+  min-height: 120px;
+}
+
+.try-text[readonly] {
+  background: transparent;
+}
+
+.versions {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.versions li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.versions li:first-child {
+  border-top: 0;
+}
+
+.version-info {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
+  min-width: 0;
+  font-size: 0.875rem;
+}
+
+.version-info time {
+  color: var(--muted);
+}
+
+.version-styles {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.savebar {
+  grid-column: 1 / -1;
+  position: sticky;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 10px 18px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 4px 24px rgb(30 28 24 / 0.12);
+}
+
+.savebar .status {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.savebar .status:empty {
+  display: block;
+}
+
+.savebar .copy {
+  height: 40px;
+  padding: 0 16px;
+}
+
+.run:disabled,
+.savebar .run:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+[data-tone="error"] {
+  color: var(--danger) !important;
+}
+
+@media (max-width: 900px) {
+  .editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .editor-side {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 760px) {
+  main {
+    padding-bottom: 16px;
+  }
+
+  .style-head {
+    flex-wrap: wrap;
+  }
+
+  .style-name {
+    flex-basis: 100%;
+  }
+
+  .style-actions {
+    margin-left: auto;
+  }
+
+  .savebar {
+    flex-wrap: wrap;
+    border-radius: var(--radius);
+    padding: 10px;
+  }
+
+  .savebar .status {
+    flex-basis: 100%;
+    padding: 2px 6px 0;
+  }
+
+  .savebar .run {
+    flex: 1;
+    justify-content: center;
+    white-space: nowrap;
+  }
+}

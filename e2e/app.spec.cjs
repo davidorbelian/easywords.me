@@ -48,16 +48,16 @@ test("typing only updates the input score", async ({ page }) => {
   await expect(output(page)).toHaveValue("");
 });
 
-test("the button and the level picker rerun the rewrite", async ({ page }) => {
+test("the button and the style picker rerun the rewrite", async ({ page }) => {
   await page.getByRole("textbox", { name: "Fancy text" }).fill(HARD);
   const first = page.waitForRequest("**/api/simplify");
   await page.getByRole("button", { name: /Dumb it down/ }).click();
-  expect((await first).postDataJSON()).toEqual({ text: HARD, level: "simple" });
+  expect((await first).postDataJSON()).toEqual({ text: HARD, style: "blunt" });
   await expect(output(page)).toHaveValue(EASY);
 
   const second = page.waitForRequest("**/api/simplify");
   await page.getByRole("radio", { name: "Caveman" }).click();
-  expect((await second).postDataJSON()).toEqual({ text: HARD, level: "simplest" });
+  expect((await second).postDataJSON()).toEqual({ text: HARD, style: "caveman" });
   await expect(output(page)).toHaveValue(EASY);
 
   await page.reload();
