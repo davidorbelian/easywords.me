@@ -11,7 +11,7 @@ import { SESSION_SECONDS, type Admin } from "./admin.ts";
 import { systemPrompt, type Rewriter } from "./claude.ts";
 import type { Scorer } from "./jev.ts";
 import { DailyCap, Slots, WindowLimit } from "./limits.ts";
-import { Conflict, type StyleStore } from "./styles.ts";
+import { Conflict, type PersonalityStore } from "./personalities.ts";
 
 export type Limits = {
   scores: WindowLimit;
@@ -24,7 +24,7 @@ export type AppOptions = {
   scorer: Scorer;
   rewriter: Rewriter;
   limits: Limits;
-  store: StyleStore;
+  store: PersonalityStore;
   /** The admin page is off without one. */
   admin?: Admin;
   /** Where the built pages are, because the server fills in parts of them. */
@@ -74,16 +74,16 @@ export function createApp({ scorer, rewriter, limits, store, admin, webRoot }: A
   for (const path of ["/", "/index.html"]) {
     app.get(path, async (c) => {
       const page = await readFile(join(webRoot, "index.html"), "utf8");
-      const styles = store
+      const personalities = store
         .current()
-        .styles.map(
-          (style, index) =>
-            `<label><input type="radio" name="style" value="${escape(style.id)}"${index === 0 ? " checked" : ""} />` +
-            `<span>${escape(style.name)}</span></label>`,
+        .personalities.map(
+          (personality, index) =>
+            `<label><input type="radio" name="personality" value="${escape(personality.id)}"${index === 0 ? " checked" : ""} />` +
+            `<span>${escape(personality.name)}</span></label>`,
         )
         .join("");
       const link = admin ? '<a class="admin-link" href="/admin">Admin</a>' : "";
-      return c.html(page.replace("<!-- styles -->", styles).replace("<!-- admin -->", link));
+      return c.html(page.replace("<!-- personalities -->", personalities).replace("<!-- admin -->", link));
     });
   }
 
@@ -118,15 +118,15 @@ export function createApp({ scorer, rewriter, limits, store, admin, webRoot }: A
     const body = await readJson(c);
     const text = readText(body);
     if (typeof text !== "string") return c.json({ error: text.error }, 400);
-    const id = (body as { style?: unknown } | undefined)?.style;
-    const style = typeof id === "string" ? store.style(id) : undefined;
-    if (!style) return c.json({ error: "bad_style" }, 400);
+    const id = (body as { personality?: unknown } | undefined)?.personality;
+    const personality = typeof id === "string" ? store.personality(id) : undefined;
+    if (!personality) return c.json({ error: "bad_personality" }, 400);
 
     const wait = limits.rewrites.take(clientIp(c));
     if (wait > 0) return c.json({ error: "slow_down", retryAfter: wait }, 429, { "Retry-After": String(wait) });
     if (!limits.daily.take()) return c.json({ error: "daily_limit" }, 429);
 
-    return rewrite(c, text, systemPrompt(store.current().rules, style.prompt));
+    return rewrite(c, text, systemPrompt(store.current().rules, personality.prompt));
   });
 
   if (admin) adminRoutes(admin);
@@ -165,7 +165,7 @@ export function createApp({ scorer, rewriter, limits, store, admin, webRoot }: A
       await next();
     };
     app.use("/api/admin/signout", signedIn);
-    app.use("/api/admin/styles", signedIn);
+    app.use("/api/admin/personalities", signedIn);
     app.use("/api/admin/try", signedIn);
 
     app.post("/api/admin/signout", (c) => {
@@ -173,26 +173,27 @@ export function createApp({ scorer, rewriter, limits, store, admin, webRoot }: A
       return c.body(null, 204);
     });
 
-    app.get("/api/admin/styles", (c) =>
+    app.get("/api/admin/personalities", (c) =>
       c.json({ token: admin.formToken(c.get("session")), versions: store.versions() }),
     );
 
-    app.put("/api/admin/styles", async (c) => {
+    app.put("/api/admin/personalities", async (c) => {
       const body = (await readJson(c)) as { basedOn?: unknown } | undefined;
       const draft = checkDraft(body);
-      if ("error" in draft) return c.json({ error: "bad_styles", message: draft.error }, 400);
-      if (!Number.isInteger(body?.basedOn)) return c.json({ error: "bad_styles", message: "Reload the page." }, 400);
+      if ("error" in draft) return c.json({ error: "bad_personalities", message: draft.error }, 400);
+      if (!Number.isInteger(body?.basedOn))
+        return c.json({ error: "bad_personalities", message: "Reload the page." }, 400);
       try {
         await store.save(draft, body!.basedOn as number);
       } catch (error) {
         if (error instanceof Conflict) return c.json({ error: "conflict", versions: store.versions() }, 409);
-        console.error("saving styles failed:", error);
+        console.error("saving personalities failed:", error);
         return c.json({ error: "save_failed" }, 500);
       }
       return c.json({ versions: store.versions() });
     });
 
-    // Tries a style that is not saved yet. The admin is not held to the per-IP and daily limits.
+    // Tries a personality that is not saved yet. The admin is not held to the per-IP and daily limits.
     app.post("/api/admin/try", async (c) => {
       const body = (await readJson(c)) as { rules?: unknown; prompt?: unknown } | undefined;
       const text = readText(body);

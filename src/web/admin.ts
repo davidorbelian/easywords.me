@@ -4,7 +4,7 @@ import {
   MAX_NAME_CHARS,
   MAX_PROMPT_CHARS,
   MAX_RULES_CHARS,
-  MAX_STYLES,
+  MAX_PERSONALITIES,
   type Draft,
   type Version,
 } from "../shared/rules.ts";
@@ -23,9 +23,9 @@ const signout = element<HTMLButtonElement>("signout");
 const editor = element<HTMLDivElement>("editor");
 const rules = element<HTMLTextAreaElement>("rules");
 const rulesCount = element<HTMLSpanElement>("rules-count");
-const styleList = element<HTMLOListElement>("style-list");
+const personalityList = element<HTMLOListElement>("personality-list");
 const add = element<HTMLButtonElement>("add");
-const tryStyle = element<HTMLSelectElement>("try-style");
+const tryPersonality = element<HTMLSelectElement>("try-personality");
 const tryInput = element<HTMLTextAreaElement>("try-input");
 const tryOutput = element<HTMLTextAreaElement>("try-output");
 const tryScore = element<HTMLOutputElement>("try-score");
@@ -49,14 +49,14 @@ const timeFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", tim
 function draft(): Draft {
   return {
     rules: rules.value,
-    styles: items.map(({ id, name, prompt }) => (id ? { id, name, prompt } : { name, prompt })),
+    personalities: items.map(({ id, name, prompt }) => (id ? { id, name, prompt } : { name, prompt })),
   };
 }
 
 function same(version: Version | undefined): boolean {
   if (!version) return false;
-  const { rules: savedRules, styles } = version;
-  return JSON.stringify(draft()) === JSON.stringify({ rules: savedRules, styles });
+  const { rules: savedRules, personalities } = version;
+  return JSON.stringify(draft()) === JSON.stringify({ rules: savedRules, personalities });
 }
 
 function dirty(): boolean {
@@ -81,16 +81,16 @@ function fit(area: HTMLTextAreaElement): void {
 
 function useVersion(version: Version): void {
   rules.value = version.rules;
-  items = version.styles.map((style) => ({ ...style, key: nextKey++ }));
-  renderStyles();
+  items = version.personalities.map((personality) => ({ ...personality, key: nextKey++ }));
+  renderPersonalities();
   fit(rules);
 }
 
-function renderStyles(): void {
-  styleList.replaceChildren(...items.map(renderItem));
-  add.disabled = items.length >= MAX_STYLES;
-  const picked = Number(tryStyle.value);
-  tryStyle.replaceChildren(
+function renderPersonalities(): void {
+  personalityList.replaceChildren(...items.map(renderItem));
+  add.disabled = items.length >= MAX_PERSONALITIES;
+  const picked = Number(tryPersonality.value);
+  tryPersonality.replaceChildren(
     ...items.map((item) => new Option(item.name.trim() || "Unnamed", String(item.key), false, item.key === picked)),
   );
   update();
@@ -98,27 +98,27 @@ function renderStyles(): void {
 
 function renderItem(item: Item, index: number): HTMLLIElement {
   const row = document.createElement("li");
-  row.className = "style-item";
+  row.className = "personality-item";
 
   const head = document.createElement("div");
-  head.className = "style-head";
+  head.className = "personality-head";
 
   const name = document.createElement("input");
-  name.className = "style-name";
+  name.className = "personality-name";
   name.value = item.name;
   name.maxLength = MAX_NAME_CHARS;
   name.placeholder = "Name on the button";
-  name.ariaLabel = `Name of style ${index + 1}`;
+  name.ariaLabel = `Name of personality ${index + 1}`;
   name.addEventListener("input", () => {
     item.name = name.value;
-    const option = [...tryStyle.options].find((choice) => choice.value === String(item.key));
+    const option = [...tryPersonality.options].find((choice) => choice.value === String(item.key));
     if (option) option.text = name.value.trim() || "Unnamed";
     label();
     edited();
   });
 
   const id = document.createElement("span");
-  id.className = "style-id";
+  id.className = "personality-id";
   id.textContent = item.id ?? "new";
   id.title = item.id ? "The id never changes, so links and saved choices keep working." : "Gets an id when saved.";
 
@@ -126,27 +126,27 @@ function renderItem(item: Item, index: number): HTMLLIElement {
   const down = button("↓", index === items.length - 1, () => move(index, 1));
   const remove = button("Remove", items.length === 1, () => {
     items.splice(index, 1);
-    renderStyles();
+    renderPersonalities();
     edited();
   });
   const label = () => {
-    const title = item.name.trim() || "style";
+    const title = item.name.trim() || "personality";
     up.ariaLabel = `Move ${title} up`;
     down.ariaLabel = `Move ${title} down`;
     remove.ariaLabel = `Remove ${title}`;
   };
   label();
   const actions = document.createElement("div");
-  actions.className = "style-actions";
+  actions.className = "personality-actions";
   actions.append(up, down, remove);
   head.append(name, id, actions);
 
   const prompt = document.createElement("textarea");
-  prompt.className = "style-prompt";
+  prompt.className = "personality-prompt";
   prompt.value = item.prompt;
   prompt.spellcheck = false;
   prompt.placeholder = "Voice: who talks, and how…";
-  prompt.ariaLabel = `Prompt of style ${index + 1}`;
+  prompt.ariaLabel = `Prompt of personality ${index + 1}`;
   const promptCount = document.createElement("span");
   promptCount.className = "count";
   count(promptCount, item.prompt.length, MAX_PROMPT_CHARS);
@@ -159,7 +159,7 @@ function renderItem(item: Item, index: number): HTMLLIElement {
   requestAnimationFrame(() => fit(prompt));
 
   const foot = document.createElement("div");
-  foot.className = "style-foot";
+  foot.className = "personality-foot";
   foot.append(promptCount);
 
   row.append(head, prompt, foot);
@@ -180,9 +180,11 @@ function button(text: string, disabled: boolean, onClick: () => void, label?: st
 function move(index: number, by: number): void {
   const [item] = items.splice(index, 1);
   items.splice(index + by, 0, item!);
-  renderStyles();
+  renderPersonalities();
   edited();
-  styleList.children[index + by]?.querySelector<HTMLButtonElement>(by < 0 ? "button" : "button + button")?.focus();
+  personalityList.children[index + by]
+    ?.querySelector<HTMLButtonElement>(by < 0 ? "button" : "button + button")
+    ?.focus();
 }
 
 function renderVersions(): void {
@@ -195,8 +197,8 @@ function renderVersions(): void {
       time.dateTime = version.savedAt;
       time.textContent = timeFormat.format(new Date(version.savedAt));
       const names = document.createElement("span");
-      names.className = "version-styles";
-      names.textContent = version.styles.map((style) => style.name).join(", ");
+      names.className = "version-personalities";
+      names.textContent = version.personalities.map((personality) => personality.name).join(", ");
       const info = document.createElement("div");
       info.className = "version-info";
       info.append(number, time, names);
@@ -271,7 +273,7 @@ function showSignin(message = ""): void {
 }
 
 async function load(keepDraft: boolean): Promise<void> {
-  const response = await api("GET", "/api/admin/styles");
+  const response = await api("GET", "/api/admin/personalities");
   if (response.status === 401) return;
   const body = (await response.json()) as { token: string; versions: Version[] };
   token = body.token;
@@ -332,9 +334,9 @@ rules.addEventListener("input", () => {
 
 add.addEventListener("click", () => {
   items.push({ key: nextKey++, name: "", prompt: "" });
-  renderStyles();
+  renderPersonalities();
   edited();
-  styleList.lastElementChild?.querySelector("input")?.focus();
+  personalityList.lastElementChild?.querySelector("input")?.focus();
 });
 
 discard.addEventListener("click", () => {
@@ -352,7 +354,7 @@ save.addEventListener("click", async () => {
   save.disabled = true;
   setNote("Saving…");
   try {
-    const response = await api("PUT", "/api/admin/styles", { ...checked, basedOn });
+    const response = await api("PUT", "/api/admin/personalities", { ...checked, basedOn });
     const body = (await response.json().catch(() => undefined)) as
       { versions?: Version[]; error?: string; message?: string } | undefined;
     if (response.ok && body?.versions) {
@@ -373,7 +375,7 @@ save.addEventListener("click", async () => {
 });
 
 tryButton.addEventListener("click", async () => {
-  const item = items.find((style) => String(style.key) === tryStyle.value) ?? items[0];
+  const item = items.find((personality) => String(personality.key) === tryPersonality.value) ?? items[0];
   const text = tryInput.value;
   if (!item) return;
   if (!text.trim()) {
@@ -386,7 +388,7 @@ tryButton.addEventListener("click", async () => {
     return;
   }
   if (!item.prompt.trim()) {
-    showStatus(tryStatus, "This style has no prompt yet.", "error");
+    showStatus(tryStatus, "This personality has no prompt yet.", "error");
     return;
   }
 

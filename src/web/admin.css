@@ -121,7 +121,7 @@
   min-width: 0;
 }
 
-/* Short enough to stay in view above the save bar, so Try is at hand next to any style. */
+/* Short enough to stay in view above the save bar, so Try is at hand next to any personality. */
 .editor-side {
   position: sticky;
   top: 12px;
@@ -129,7 +129,7 @@
   overflow-y: auto;
 }
 
-.style-list,
+.personality-list,
 .versions {
   display: flex;
   flex-direction: column;
@@ -138,11 +138,11 @@
   list-style: none;
 }
 
-.style-list {
+.personality-list {
   gap: 12px;
 }
 
-.style-item {
+.personality-item {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -151,19 +151,19 @@
   border-radius: 12px;
 }
 
-.style-head {
+.personality-head {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.style-name {
+.personality-name {
   flex: 1;
   min-width: 0;
   font-weight: 650;
 }
 
-.style-id {
+.personality-id {
   color: var(--muted);
   font:
     0.8125rem ui-monospace,
@@ -173,17 +173,17 @@
   white-space: nowrap;
 }
 
-.style-actions {
+.personality-actions {
   display: flex;
   gap: 6px;
 }
 
-.style-actions .copy {
+.personality-actions .copy {
   min-width: 30px;
   padding: 0 10px;
 }
 
-.style-foot {
+.personality-foot {
   display: flex;
   justify-content: flex-end;
   margin-top: -2px;
@@ -227,7 +227,7 @@
   color: var(--muted);
 }
 
-.version-styles {
+.version-personalities {
   grid-column: 1 / -1;
   overflow: hidden;
   color: var(--muted);
@@ -302,15 +302,15 @@
     padding-bottom: 16px;
   }
 
-  .style-head {
+  .personality-head {
     flex-wrap: wrap;
   }
 
-  .style-name {
+  .personality-name {
     flex-basis: 100%;
   }
 
-  .style-actions {
+  .personality-actions {
     margin-left: auto;
   }
 

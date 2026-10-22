@@ -1,6 +1,6 @@
 import { mkdir, open, readFile, rename } from "node:fs/promises";
 import { join } from "node:path";
-import type { Draft, Settings, Style, Version } from "../shared/rules.ts";
+import type { Draft, Settings, Personality, Version } from "../shared/rules.ts";
 import seed from "./seed.json" with { type: "json" };
 
 export const KEEP_VERSIONS = 50;
@@ -8,8 +8,8 @@ export const KEEP_VERSIONS = 50;
 /** The save was based on a version that is no longer the newest. */
 export class Conflict extends Error {}
 
-/** All versions of the styles, saved in one file. The newest version is what users get. */
-export class StyleStore {
+/** All versions of the personalities, saved in one file. The newest version is what users get. */
+export class PersonalityStore {
   #versions: Version[];
   readonly #file: string;
   readonly #now: () => number;
@@ -22,19 +22,20 @@ export class StyleStore {
   }
 
   /** Reads the file in `dir`. Without one, the seed becomes version 1, as if an admin had saved it. */
-  static async open(dir: string, now: () => number = Date.now): Promise<StyleStore> {
+  static async open(dir: string, now: () => number = Date.now): Promise<PersonalityStore> {
     await mkdir(dir, { recursive: true });
-    const file = join(dir, "styles.json");
-    let text: string;
-    try {
-      text = await readFile(file, "utf8");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      const store = new StyleStore(file, [], now);
-      await store.save(seed, 0);
-      return store;
+    const file = join(dir, "personalities.json");
+    const text = await readIfThere(file);
+    if (text !== undefined) return new PersonalityStore(file, parse(text, file), now);
+    const old = await fromStyles(dir);
+    if (old !== undefined) {
+      const versions = parse(old, join(dir, "styles.json"));
+      await writeWhole(file, serialize(versions));
+      return new PersonalityStore(file, versions, now);
     }
-    return new StyleStore(file, parse(text, file), now);
+    const store = new PersonalityStore(file, [], now);
+    await store.save(seed, 0);
+    return store;
   }
 
   current(): Version {
@@ -46,8 +47,8 @@ export class StyleStore {
     return this.#versions.toReversed();
   }
 
-  style(id: string): Style | undefined {
-    return this.current().styles.find((style) => style.id === id);
+  personality(id: string): Personality | undefined {
+    return this.current().personalities.find((personality) => personality.id === id);
   }
 
   /** Saves the draft as a new version, unless someone saved after `basedOn`. */
@@ -57,7 +58,7 @@ export class StyleStore {
       if (basedOn !== newest) throw new Conflict();
       const version: Version = { number: newest + 1, savedAt: new Date(this.#now()).toISOString(), ...withIds(draft) };
       const versions = [...this.#versions, version].slice(-KEEP_VERSIONS);
-      await writeWhole(this.#file, JSON.stringify({ versions }, null, 2) + "\n");
+      await writeWhole(this.#file, serialize(versions));
       this.#versions = versions;
       return version;
     });
@@ -66,18 +67,18 @@ export class StyleStore {
   }
 }
 
-/** Gives each new style an id made from its name, unique among the others. */
+/** Gives each new personality an id made from its name, unique among the others. */
 export function withIds(draft: Draft): Settings {
-  const taken = new Set(draft.styles.flatMap((style) => (style.id ? [style.id] : [])));
-  const styles = draft.styles.map(({ id, name, prompt }) => {
+  const taken = new Set(draft.personalities.flatMap((personality) => (personality.id ? [personality.id] : [])));
+  const personalities = draft.personalities.map(({ id, name, prompt }) => {
     if (id) return { id, name, prompt };
-    const base = slug(name) || "style";
+    const base = slug(name) || "personality";
     let unique = base;
     for (let n = 2; taken.has(unique); n++) unique = `${base}-${n}`;
     taken.add(unique);
     return { id: unique, name, prompt };
   });
-  return { rules: draft.rules, styles };
+  return { rules: draft.rules, personalities };
 }
 
 function slug(name: string): string {
@@ -100,15 +101,40 @@ function parse(text: string, file: string): Version[] {
         Number.isInteger(version.number) &&
         typeof version.savedAt === "string" &&
         typeof version.rules === "string" &&
-        Array.isArray(version.styles) &&
-        version.styles.length > 0 &&
-        version.styles.every(
-          (style: Partial<Style>) =>
-            typeof style.id === "string" && typeof style.name === "string" && typeof style.prompt === "string",
+        Array.isArray(version.personalities) &&
+        version.personalities.length > 0 &&
+        version.personalities.every(
+          (personality: Partial<Personality>) =>
+            typeof personality.id === "string" &&
+            typeof personality.name === "string" &&
+            typeof personality.prompt === "string",
         ),
     );
-  if (!valid) throw new Error(`${file} is not a list of style versions`);
+  if (!valid) throw new Error(`${file} is not a list of personality versions`);
   return versions as Version[];
+}
+
+// Personalities were called styles before, in styles.json. That file stays as it was, so the
+// image from before the rename still starts after a rollback.
+async function fromStyles(dir: string): Promise<string | undefined> {
+  const text = await readIfThere(join(dir, "styles.json"));
+  if (text === undefined) return undefined;
+  const { versions } = JSON.parse(text) as { versions?: Array<{ styles?: unknown }> };
+  if (!Array.isArray(versions)) return text;
+  return serialize(versions.map(({ styles, ...version }) => ({ ...version, personalities: styles })));
+}
+
+async function readIfThere(file: string): Promise<string | undefined> {
+  try {
+    return await readFile(file, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+function serialize(versions: unknown[]): string {
+  return JSON.stringify({ versions }, null, 2) + "\n";
 }
 
 // A crash halfway leaves the old file whole, because the rename swaps them in one step.
