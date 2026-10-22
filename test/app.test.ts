@@ -176,6 +176,22 @@ describe("GET /", () => {
   });
 });
 
+describe("built files", () => {
+  it("lets browsers keep files with a hash in the name for good", async () => {
+    await writeFile(join(dir, "styles-7QBF3AEI.css"), "body {}");
+    const response = await app().request("/styles-7QBF3AEI.css");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+  });
+
+  it("makes browsers check pages and files without a hash every time", async () => {
+    await writeFile(join(dir, "favicon.svg"), "<svg/>");
+    for (const path of ["/", "/admin", "/favicon.svg"]) {
+      expect((await app().request(path)).headers.get("cache-control"), path).toBe("no-cache");
+    }
+  });
+});
+
 describe("admin", () => {
   async function signIn(instance = app(), headers: Record<string, string> = {}) {
     const response = await instance.request(post("/api/admin/signin", { hassword: HASSWORD }, "1.2.3.4", headers));

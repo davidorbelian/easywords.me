@@ -10,6 +10,9 @@ rules in the code are only the first version.
 
 - `src/server` is a Hono app on Node 26. Node runs the TypeScript files directly, so the server has no build step.
 - `src/web` is plain HTML, CSS and TypeScript. esbuild bundles it into `dist/web`.
+  The CSS and JS names get a hash of their content, written into the HTML at build time.
+  Browsers keep those files for good and check everything else every time.
+  Without our own `Cache-Control`, Cloudflare tells browsers to keep files for 4 hours, so a new page met old CSS.
 - `src/shared` holds rules both sides use: limits and the check of an edited set of styles.
 - Rewrites come from Claude Sonnet through the Claude Agent SDK, with a subscription token from `claude setup-token`.
   The SDK starts the bundled `claude` binary for each rewrite, with no tools and no settings files.

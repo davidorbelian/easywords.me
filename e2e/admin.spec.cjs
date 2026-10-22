@@ -49,6 +49,14 @@ test("the Admin link leads to sign-in, which refuses a wrong hassword", async ({
   await expect(page.getByRole("heading", { name: "Shared rules" })).toBeHidden();
 });
 
+test("a first visit shows only the sign-in card", async ({ page }) => {
+  await page.goto("/admin");
+  await expect(page.getByLabel("Hassword")).toBeVisible();
+  await expect(page.locator("#signin-status")).toBeEmpty();
+  await expect(page.locator("#editor")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeHidden();
+});
+
 test("explains the lock after too many wrong tries", async ({ page }) => {
   await page.route("**/api/admin/signin", (route) =>
     route.fulfill({ status: 429, json: { error: "locked", retryAfter: 840 } }),

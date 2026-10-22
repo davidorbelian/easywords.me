@@ -1,5 +1,4 @@
 import { serve } from "@hono/node-server";
-import { serveStatic } from "@hono/node-server/serve-static";
 import { Admin, loadKey, MIN_HASSWORD_CHARS } from "./admin.ts";
 import { createApp, defaultLimits } from "./app.ts";
 import { createClaudeRewriter } from "./claude.ts";
@@ -34,7 +33,6 @@ const app = createApp({
   admin: hassword ? new Admin(hassword, await loadKey(dataDir)) : undefined,
   webRoot,
 });
-app.use("/*", serveStatic({ root: webRoot }));
 
 setInterval(() => {
   limits.scores.sweep();

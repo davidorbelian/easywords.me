@@ -258,7 +258,7 @@ async function api(method: string, path: string, body?: unknown, signal?: AbortS
     signal,
   });
   if (response.status === 401)
-    showSignin(dirty() ? "You were signed out. Sign in again; your edits are still here." : "");
+    showSignin(!editor.hidden && dirty() ? "You were signed out. Sign in again; your edits are still here." : "");
   return response;
 }
 

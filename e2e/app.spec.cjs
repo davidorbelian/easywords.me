@@ -127,3 +127,21 @@ test("fits the screen without sideways scrolling", async ({ page }) => {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });
+
+// A browser keeps CSS and JS for hours, so a new page must never load an old file by the same name.
+test("pages load only files with a hash in the name, which browsers may keep", async ({ page }) => {
+  for (const path of ["/", "/admin"]) {
+    const files = [];
+    page.on("response", (response) => {
+      if (/\.(css|js)$/.test(new URL(response.url()).pathname)) files.push(response);
+    });
+    await page.goto(path);
+    await page.waitForLoadState("networkidle");
+    expect(files.length, path).toBeGreaterThanOrEqual(2);
+    for (const file of files) {
+      expect(new URL(file.url()).pathname).toMatch(/-[A-Z0-9]{8}\.(css|js)$/);
+      expect(await file.headerValue("cache-control")).toBe("public, max-age=31536000, immutable");
+    }
+    page.removeAllListeners("response");
+  }
+});

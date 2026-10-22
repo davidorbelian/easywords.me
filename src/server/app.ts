@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
@@ -43,6 +44,7 @@ type Env = { Variables: { session: string } };
 
 const COOKIE = "easywords_admin";
 const TOKEN_HEADER = "x-form-token";
+const HASHED = /-[A-Z0-9]{8}\.(?:js|css)$/;
 
 export function createApp({ scorer, rewriter, limits, store, admin, webRoot }: AppOptions): Hono<Env> {
   const app = new Hono<Env>();
@@ -59,6 +61,14 @@ export function createApp({ scorer, rewriter, limits, store, admin, webRoot }: A
     }),
   );
 
+  // Cloudflare would keep these for 4 hours without a header of our own. Built files have a hash of
+  // their content in the name, so they may stay for good, and the rest is checked every time.
+  app.use(async (c, next) => {
+    await next();
+    if ((c.req.method === "GET" || c.req.method === "HEAD") && c.res.ok && !c.res.headers.has("Cache-Control"))
+      c.header("Cache-Control", HASHED.test(c.req.path) ? "public, max-age=31536000, immutable" : "no-cache");
+  });
+
   app.get("/health", (c) => c.text("ok"));
 
   for (const path of ["/", "/index.html"]) {
@@ -73,7 +83,6 @@ export function createApp({ scorer, rewriter, limits, store, admin, webRoot }: A
         )
         .join("");
       const link = admin ? '<a class="admin-link" href="/admin">Admin</a>' : "";
-      c.header("Cache-Control", "no-cache");
       return c.html(page.replace("<!-- styles -->", styles).replace("<!-- admin -->", link));
     });
   }
@@ -81,7 +90,6 @@ export function createApp({ scorer, rewriter, limits, store, admin, webRoot }: A
   for (const path of ["/admin", "/admin.html"]) {
     app.get(path, async (c) => {
       if (!admin) return c.notFound();
-      c.header("Cache-Control", "no-cache");
       return c.html(await readFile(join(webRoot, "admin.html"), "utf8"));
     });
   }
@@ -121,78 +129,81 @@ export function createApp({ scorer, rewriter, limits, store, admin, webRoot }: A
     return rewrite(c, text, systemPrompt(store.current().rules, style.prompt));
   });
 
-  if (!admin) {
-    app.all("/api/admin/*", (c) => c.notFound());
-    return app;
-  }
+  if (admin) adminRoutes(admin);
+  else app.all("/api/admin/*", (c) => c.notFound());
 
-  app.post("/api/admin/signin", async (c) => {
-    const body = (await readJson(c)) as { hassword?: unknown } | undefined;
-    const result = admin.signIn(typeof body?.hassword === "string" ? body.hassword : "");
-    if (result.ok) {
-      setCookie(c, COOKIE, result.session, {
-        path: "/",
-        httpOnly: true,
-        secure: secure(c),
-        sameSite: "Strict",
-        maxAge: SESSION_SECONDS,
-      });
-      return c.body(null, 204);
-    }
-    if (result.retryAfter)
-      return c.json({ error: "locked", retryAfter: result.retryAfter }, 429, {
-        "Retry-After": String(result.retryAfter),
-      });
-    return c.json({ error: "wrong" }, 403);
-  });
-
-  const signedIn: MiddlewareHandler<Env> = async (c, next) => {
-    const session = getCookie(c, COOKIE);
-    if (!session || !admin.valid(session)) return c.json({ error: "signed_out" }, 401);
-    if (c.req.method !== "GET" && !admin.validToken(session, c.req.header(TOKEN_HEADER)))
-      return c.json({ error: "bad_token" }, 403);
-    c.set("session", session);
-    await next();
-  };
-  app.use("/api/admin/signout", signedIn);
-  app.use("/api/admin/styles", signedIn);
-  app.use("/api/admin/try", signedIn);
-
-  app.post("/api/admin/signout", (c) => {
-    deleteCookie(c, COOKIE, { path: "/", secure: secure(c) });
-    return c.body(null, 204);
-  });
-
-  app.get("/api/admin/styles", (c) => c.json({ token: admin.formToken(c.get("session")), versions: store.versions() }));
-
-  app.put("/api/admin/styles", async (c) => {
-    const body = (await readJson(c)) as { basedOn?: unknown } | undefined;
-    const draft = checkDraft(body);
-    if ("error" in draft) return c.json({ error: "bad_styles", message: draft.error }, 400);
-    if (!Number.isInteger(body?.basedOn)) return c.json({ error: "bad_styles", message: "Reload the page." }, 400);
-    try {
-      await store.save(draft, body!.basedOn as number);
-    } catch (error) {
-      if (error instanceof Conflict) return c.json({ error: "conflict", versions: store.versions() }, 409);
-      console.error("saving styles failed:", error);
-      return c.json({ error: "save_failed" }, 500);
-    }
-    return c.json({ versions: store.versions() });
-  });
-
-  // Tries a style that is not saved yet. The admin is not held to the per-IP and daily limits.
-  app.post("/api/admin/try", async (c) => {
-    const body = (await readJson(c)) as { rules?: unknown; prompt?: unknown } | undefined;
-    const text = readText(body);
-    if (typeof text !== "string") return c.json({ error: text.error }, 400);
-    const { rules, prompt } = body ?? {};
-    if (typeof rules !== "string" || rules.length > MAX_RULES_CHARS) return c.json({ error: "bad_rules" }, 400);
-    if (typeof prompt !== "string" || !prompt.trim() || prompt.length > MAX_PROMPT_CHARS)
-      return c.json({ error: "bad_prompt" }, 400);
-    return rewrite(c, text, systemPrompt(rules, prompt));
-  });
-
+  app.use("/*", serveStatic({ root: webRoot }));
   return app;
+
+  function adminRoutes(admin: Admin): void {
+    app.post("/api/admin/signin", async (c) => {
+      const body = (await readJson(c)) as { hassword?: unknown } | undefined;
+      const result = admin.signIn(typeof body?.hassword === "string" ? body.hassword : "");
+      if (result.ok) {
+        setCookie(c, COOKIE, result.session, {
+          path: "/",
+          httpOnly: true,
+          secure: secure(c),
+          sameSite: "Strict",
+          maxAge: SESSION_SECONDS,
+        });
+        return c.body(null, 204);
+      }
+      if (result.retryAfter)
+        return c.json({ error: "locked", retryAfter: result.retryAfter }, 429, {
+          "Retry-After": String(result.retryAfter),
+        });
+      return c.json({ error: "wrong" }, 403);
+    });
+
+    const signedIn: MiddlewareHandler<Env> = async (c, next) => {
+      const session = getCookie(c, COOKIE);
+      if (!session || !admin.valid(session)) return c.json({ error: "signed_out" }, 401);
+      if (c.req.method !== "GET" && !admin.validToken(session, c.req.header(TOKEN_HEADER)))
+        return c.json({ error: "bad_token" }, 403);
+      c.set("session", session);
+      await next();
+    };
+    app.use("/api/admin/signout", signedIn);
+    app.use("/api/admin/styles", signedIn);
+    app.use("/api/admin/try", signedIn);
+
+    app.post("/api/admin/signout", (c) => {
+      deleteCookie(c, COOKIE, { path: "/", secure: secure(c) });
+      return c.body(null, 204);
+    });
+
+    app.get("/api/admin/styles", (c) =>
+      c.json({ token: admin.formToken(c.get("session")), versions: store.versions() }),
+    );
+
+    app.put("/api/admin/styles", async (c) => {
+      const body = (await readJson(c)) as { basedOn?: unknown } | undefined;
+      const draft = checkDraft(body);
+      if ("error" in draft) return c.json({ error: "bad_styles", message: draft.error }, 400);
+      if (!Number.isInteger(body?.basedOn)) return c.json({ error: "bad_styles", message: "Reload the page." }, 400);
+      try {
+        await store.save(draft, body!.basedOn as number);
+      } catch (error) {
+        if (error instanceof Conflict) return c.json({ error: "conflict", versions: store.versions() }, 409);
+        console.error("saving styles failed:", error);
+        return c.json({ error: "save_failed" }, 500);
+      }
+      return c.json({ versions: store.versions() });
+    });
+
+    // Tries a style that is not saved yet. The admin is not held to the per-IP and daily limits.
+    app.post("/api/admin/try", async (c) => {
+      const body = (await readJson(c)) as { rules?: unknown; prompt?: unknown } | undefined;
+      const text = readText(body);
+      if (typeof text !== "string") return c.json({ error: text.error }, 400);
+      const { rules, prompt } = body ?? {};
+      if (typeof rules !== "string" || rules.length > MAX_RULES_CHARS) return c.json({ error: "bad_rules" }, 400);
+      if (typeof prompt !== "string" || !prompt.trim() || prompt.length > MAX_PROMPT_CHARS)
+        return c.json({ error: "bad_prompt" }, 400);
+      return rewrite(c, text, systemPrompt(rules, prompt));
+    });
+  }
 
   async function rewrite(c: Context<Env>, text: string, system: string): Promise<Response> {
     const stop = new AbortController();
