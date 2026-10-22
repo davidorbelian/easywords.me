@@ -4,10 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>easywords</title>
-    <meta
-      name="description"
-      content="Paste hard text. Get the same text in easy words, with a score for how easy it is."
-    />
+    <meta name="description" content="Paste fancy text. Get the plain, rude truth, with a score for how easy it is." />
     <meta name="color-scheme" content="light dark" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
@@ -19,18 +16,18 @@
         <img src="favicon.svg" alt="" width="28" height="28" />
         <span>easywords</span>
       </a>
-      <p class="tagline">Hard text in, easy words out.</p>
+      <p class="tagline">Fancy words in. Plain truth out.</p>
     </header>
 
     <main>
       <div class="toolbar">
         <div class="levels" role="radiogroup" aria-label="How simple">
-          <label><input type="radio" name="level" value="simple" checked /><span>Simple</span></label>
-          <label><input type="radio" name="level" value="simpler" /><span>Simpler</span></label>
-          <label><input type="radio" name="level" value="simplest" /><span>Simplest</span></label>
+          <label><input type="radio" name="level" value="simple" checked /><span>Blunt</span></label>
+          <label><input type="radio" name="level" value="simpler" /><span>Teacher</span></label>
+          <label><input type="radio" name="level" value="simplest" /><span>Caveman</span></label>
         </div>
         <button id="run" class="run" type="button">
-          <span class="run-label">Make it easy</span>
+          <span class="run-label">Dumb it down</span>
           <kbd class="run-keys" aria-hidden="true"></kbd>
         </button>
       </div>
@@ -38,7 +35,7 @@
       <div class="panes">
         <section class="pane" aria-labelledby="input-title">
           <div class="pane-head">
-            <h2 id="input-title">Your text</h2>
+            <h2 id="input-title">Fancy text</h2>
             <output id="input-score" class="score" data-state="empty" aria-live="polite">
               <span class="score-label">Easy score</span><span class="score-value">–</span>
             </output>
@@ -47,7 +44,7 @@
             id="input"
             spellcheck="false"
             aria-labelledby="input-title"
-            placeholder="Paste some hard text here…"
+            placeholder="Paste something that used way too many words…"
           ></textarea>
           <div class="pane-foot">
             <span id="count" class="count">0 / 5,000</span>
@@ -69,7 +66,7 @@
 
         <section class="pane" aria-labelledby="output-title">
           <div class="pane-head">
-            <h2 id="output-title">Easy words</h2>
+            <h2 id="output-title">Plain truth</h2>
             <output id="output-score" class="score" data-state="empty" aria-live="polite">
               <span class="score-label">Easy score</span><span class="score-value">–</span>
               <span class="score-gain" hidden></span>
@@ -79,7 +76,7 @@
             id="output"
             readonly
             aria-labelledby="output-title"
-            placeholder="Easy words show up here."
+            placeholder="The honest version shows up here."
           ></textarea>
           <div class="pane-foot">
             <span id="status" class="status" role="status"></span>
@@ -89,6 +86,6 @@
       </div>
     </main>
 
-    <footer class="bottom">Scores by Jev. Easy words by Claude. We do not save your text.</footer>
+    <footer class="bottom">Scores by Jev. Rudeness by Claude. We don't save your text. We have standards.</footer>
   </body>
 </html>

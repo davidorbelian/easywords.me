@@ -4,11 +4,11 @@ const SCORE_DELAY_MS = 500;
 const LEVEL_KEY = "easywords.level";
 
 const MESSAGES: Record<string, string> = {
-  empty: "Paste some text first.",
-  too_long: `That text is too long. Keep it under ${MAX_INPUT_CHARS.toLocaleString("en")} characters.`,
-  daily_limit: "That's all for today. Come back tomorrow.",
-  busy: "Lots of people are here right now. Try again in a moment.",
-  failed: "Something went wrong. Please try again.",
+  empty: "Paste some text first. We can't roast nothing.",
+  too_long: `Nobody reads that much, not even us. Keep it under ${MAX_INPUT_CHARS.toLocaleString("en")} characters.`,
+  daily_limit: "That's enough truth for one day. Come back tomorrow.",
+  busy: "Too many people are being rude right now. Try again in a moment.",
+  failed: "Well, shit. We broke it. Please try again.",
 };
 
 function element<T extends HTMLElement>(id: string): T {
@@ -64,7 +64,7 @@ function updateCount(): void {
 function errorMessage(body: { error?: string; retryAfter?: number } | undefined): string {
   if (body?.error === "slow_down") {
     const seconds = body.retryAfter ?? 60;
-    return `Slow down a little. Try again in ${seconds} second${seconds === 1 ? "" : "s"}.`;
+    return `Whoa, easy. Try again in ${seconds} second${seconds === 1 ? "" : "s"}.`;
   }
   return MESSAGES[body?.error ?? ""] ?? MESSAGES.failed!;
 }
@@ -101,7 +101,7 @@ async function scoreInput(): Promise<void> {
 
 function setBusy(busy: boolean): void {
   run.disabled = busy;
-  run.querySelector(".run-label")!.textContent = busy ? "Working…" : "Make it easy";
+  run.querySelector(".run-label")!.textContent = busy ? "Dumbing…" : "Dumb it down";
   output.setAttribute("aria-busy", String(busy));
 }
 
@@ -145,7 +145,7 @@ async function simplify(): Promise<void> {
   output.value = "";
   copy.disabled = true;
   showScore(outputScore, { state: "empty" });
-  showStatus("Making it easy…");
+  showStatus("Translating from Pompous…");
   setBusy(true);
 
   try {
