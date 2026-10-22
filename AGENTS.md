@@ -1,6 +1,10 @@
 # easywords
 
-Paste hard text, get the same text in easy words. Both sides get an "Easy score" from 0 to 100.
+Paste fancy text, get the plain truth back in easy, rude words. Both sides get an "Easy score" from 0 to 100.
+
+The site is a joke. Each level is a comic voice: Blunt (a blunt friend), Teacher (a kindergarten teacher losing patience)
+and Caveman. Swearing and snark are wanted. Facts may thin out as the level goes up, but a rewrite never states something false.
+The API keeps the level ids `simple`, `simpler` and `simplest`.
 
 ## How it works
 
