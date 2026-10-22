@@ -48,16 +48,16 @@ test("typing only updates the input score", async ({ page }) => {
   await expect(output(page)).toHaveValue("");
 });
 
-test("the button and the style picker rerun the rewrite", async ({ page }) => {
+test("the button and the personality picker rerun the rewrite", async ({ page }) => {
   await page.getByRole("textbox", { name: "Fancy text" }).fill(HARD);
   const first = page.waitForRequest("**/api/simplify");
   await page.getByRole("button", { name: /Dumb it down/ }).click();
-  expect((await first).postDataJSON()).toEqual({ text: HARD, style: "blunt" });
+  expect((await first).postDataJSON()).toEqual({ text: HARD, personality: "blunt" });
   await expect(output(page)).toHaveValue(EASY);
 
   const second = page.waitForRequest("**/api/simplify");
   await page.getByRole("radio", { name: "Caveman" }).click();
-  expect((await second).postDataJSON()).toEqual({ text: HARD, style: "caveman" });
+  expect((await second).postDataJSON()).toEqual({ text: HARD, personality: "caveman" });
   await expect(output(page)).toHaveValue(EASY);
 
   await page.reload();
@@ -126,4 +126,22 @@ test("fits the screen without sideways scrolling", async ({ page }) => {
   await expect(output(page)).toHaveValue(EASY);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
+});
+
+// A browser keeps CSS and JS for hours, so a new page must never load an old file by the same name.
+test("pages load only files with a hash in the name, which browsers may keep", async ({ page }) => {
+  for (const path of ["/", "/admin"]) {
+    const files = [];
+    page.on("response", (response) => {
+      if (/\.(css|js)$/.test(new URL(response.url()).pathname)) files.push(response);
+    });
+    await page.goto(path);
+    await page.waitForLoadState("networkidle");
+    expect(files.length, path).toBeGreaterThanOrEqual(2);
+    for (const file of files) {
+      expect(new URL(file.url()).pathname).toMatch(/-[A-Z0-9]{8}\.(css|js)$/);
+      expect(await file.headerValue("cache-control")).toBe("public, max-age=31536000, immutable");
+    }
+    page.removeAllListeners("response");
+  }
 });

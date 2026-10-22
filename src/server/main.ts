@@ -1,10 +1,9 @@
 import { serve } from "@hono/node-server";
-import { serveStatic } from "@hono/node-server/serve-static";
 import { Admin, loadKey, MIN_HASSWORD_CHARS } from "./admin.ts";
 import { createApp, defaultLimits } from "./app.ts";
 import { createClaudeRewriter } from "./claude.ts";
 import { createJevScorer } from "./jev.ts";
-import { StyleStore } from "./styles.ts";
+import { PersonalityStore } from "./personalities.ts";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -30,11 +29,10 @@ const app = createApp({
   scorer: createJevScorer(required("JEV_API_KEY"), process.env.JEV_BASE_URL ?? "https://api.typesafe.ai"),
   rewriter: createClaudeRewriter(required("CLAUDE_CODE_OAUTH_TOKEN"), process.env.ANTHROPIC_BASE_URL),
   limits,
-  store: await StyleStore.open(dataDir),
+  store: await PersonalityStore.open(dataDir),
   admin: hassword ? new Admin(hassword, await loadKey(dataDir)) : undefined,
   webRoot,
 });
-app.use("/*", serveStatic({ root: webRoot }));
 
 setInterval(() => {
   limits.scores.sweep();

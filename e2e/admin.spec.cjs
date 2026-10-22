@@ -4,12 +4,12 @@ const seed = require("../src/server/seed.json");
 
 const HARD = "The feline reposed languidly upon the ornamental rug.";
 
-// Every test starts from the seed styles, saved as the newest version.
+// Every test starts from the seed personalities, saved as the newest version.
 test.beforeEach(async ({ page, request }, testInfo) => {
   await page.setExtraHTTPHeaders({ "CF-Connecting-IP": `test-${testInfo.testId}-${testInfo.project.name}` });
   await request.post("/api/admin/signin", { data: { hassword: ADMIN_HASSWORD } });
-  const { token, versions } = await (await request.get("/api/admin/styles")).json();
-  const saved = await request.put("/api/admin/styles", {
+  const { token, versions } = await (await request.get("/api/admin/personalities")).json();
+  const saved = await request.put("/api/admin/personalities", {
     data: { basedOn: versions[0].number, ...seed },
     headers: { "X-Form-Token": token },
   });
@@ -20,12 +20,19 @@ async function signIn(page) {
   await page.goto("/admin");
   await page.getByLabel("Hassword").fill(ADMIN_HASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Shared rules" })).toBeVisible();
+  await expect(page.locator("#personality-title")).toHaveText("Blunt");
 }
 
+const picker = (page) => page.getByRole("navigation", { name: "What to edit" });
+const open = (page, name) =>
+  picker(page)
+    .getByRole("button", { name: new RegExp(`^${name}`) })
+    .click();
+const nameField = (page) => page.getByRole("textbox", { name: "Name", exact: true });
+const promptField = (page) => page.getByRole("textbox", { name: "Prompt", exact: true });
+const messagesField = (page) => page.getByRole("textbox", { name: "Messages", exact: true });
 const saveStatus = (page) => page.locator("#save-status");
-const nameOf = (page, n) => page.getByRole("textbox", { name: `Name of style ${n}` });
-const promptOf = (page, n) => page.getByRole("textbox", { name: `Prompt of style ${n}` });
+const buildStatus = (page) => page.locator("#build-status");
 
 async function save(page) {
   await page.getByRole("button", { name: "Save for everyone" }).click();
@@ -46,7 +53,15 @@ test("the Admin link leads to sign-in, which refuses a wrong hassword", async ({
   await page.getByLabel("Hassword").fill("not the hassword");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.locator("#signin-status")).toHaveText("Wrong hassword.");
-  await expect(page.getByRole("heading", { name: "Shared rules" })).toBeHidden();
+  await expect(page.locator("#editor")).toBeHidden();
+});
+
+test("a first visit shows only the sign-in card", async ({ page }) => {
+  await page.goto("/admin");
+  await expect(page.getByLabel("Hassword")).toBeVisible();
+  await expect(page.locator("#signin-status")).toBeEmpty();
+  await expect(page.locator("#editor")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeHidden();
 });
 
 test("explains the lock after too many wrong tries", async ({ page }) => {
@@ -59,16 +74,23 @@ test("explains the lock after too many wrong tries", async ({ page }) => {
   await expect(page.locator("#signin-status")).toHaveText("Too many wrong tries. Try again in 14 minutes.");
 });
 
-test("an edited style can be tried, then saved for everyone", async ({ page }) => {
+test("the save bar shows only while something is not saved", async ({ page }) => {
   await signIn(page);
-  await expect(saveStatus(page)).toHaveText("Everyone sees this version.");
-  await expect(page.getByRole("button", { name: "Save for everyone" })).toBeDisabled();
+  await expect(page.locator("#savebar")).toBeHidden();
+  await promptField(page).fill("Voice: someone else.");
+  await expect(saveStatus(page)).toHaveText("Not saved yet. Visitors still get the live version.");
+  await expect(picker(page).locator(".pick-dot").nth(1)).toBeVisible();
+  await page.getByRole("button", { name: "Discard" }).click();
+  await expect(page.locator("#savebar")).toBeHidden();
+  await expect(promptField(page)).toHaveValue(seed.personalities[0].prompt);
+});
 
-  await nameOf(page, 1).fill("Brutal");
-  await promptOf(page, 1).fill("Voice: FAKE_REPLY:Arr, it be a cat.");
-  await expect(saveStatus(page)).toHaveText("Unsaved changes.");
+test("an edited personality can be tried, then saved for everyone", async ({ page }) => {
+  await signIn(page);
+  await nameField(page).fill("Brutal");
+  await promptField(page).fill("Voice: FAKE_REPLY:Arr, it be a cat.");
+  await expect(page.getByRole("heading", { name: "Try as Brutal" })).toBeVisible();
 
-  await page.getByLabel("Style to try").selectOption({ label: "Brutal" });
   await page.getByLabel("Sample text").fill(HARD);
   await page.getByRole("button", { name: "Try", exact: true }).click();
   await expect(page.getByLabel("Result")).toHaveValue("Arr, it be a cat.");
@@ -88,56 +110,108 @@ test("an edited style can be tried, then saved for everyone", async ({ page }) =
   await expect(page.getByRole("textbox", { name: "Plain truth" })).toHaveValue("Arr, it be a cat.");
 });
 
-test("styles can be added, moved and removed", async ({ page }) => {
+test("Try uses the open personality, and keeps it while the shared rules are open", async ({ page }) => {
   await signIn(page);
-  await page.getByRole("button", { name: "Add style" }).click();
-  await expect(nameOf(page, 4)).toBeFocused();
-  await nameOf(page, 4).fill("Pirate");
-  await promptOf(page, 4).fill("Voice: a pirate.");
-  for (let i = 0; i < 3; i++) await page.getByRole("button", { name: "Move Pirate up" }).click();
-  await page.getByRole("button", { name: "Remove Teacher" }).click();
+  await open(page, "Caveman");
+  await expect(page.getByRole("heading", { name: "Try as Caveman" })).toBeVisible();
+  await open(page, "Shared rules");
+  await expect(page.getByRole("heading", { name: "Shared rules" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Try as Caveman" })).toBeVisible();
+});
+
+test("personalities can be added, moved and removed", async ({ page }) => {
+  await signIn(page);
+  await page.getByRole("button", { name: "+ New personality" }).click();
+  await expect(nameField(page)).toBeFocused();
+  await nameField(page).fill("Pirate");
+  await promptField(page).fill("Voice: a pirate.");
+  for (let i = 0; i < 3; i++) await page.getByRole("button", { name: "Move up" }).click();
+  await expect(page.getByRole("button", { name: "Move down" })).toBeFocused();
+  await open(page, "Teacher");
+  await page.getByRole("button", { name: "Remove" }).click();
   await save(page);
-  await expect(page.locator(".style-id").first()).toHaveText("pirate");
+  await open(page, "Pirate");
+  await expect(page.locator("#personality-id")).toHaveText("id: pirate");
 
   await page.goto("/");
-  await expect(page.getByRole("radiogroup", { name: "Style" }).getByRole("radio")).toHaveCount(3);
+  await expect(page.getByRole("radiogroup", { name: "Personality" }).getByRole("radio")).toHaveCount(3);
   await expect(page.getByRole("radio", { name: "Pirate" })).toBeChecked();
   await expect(page.getByRole("radio", { name: "Teacher" })).toHaveCount(0);
 });
 
-test("a remembered style that was removed falls back to the first one", async ({ page }) => {
+test("a personality is built from messages, which stay for the next build", async ({ page }) => {
+  await signIn(page);
+  await page.getByRole("button", { name: "+ From messages" }).click();
+  await expect(messagesField(page)).toBeFocused();
+  await page.getByRole("button", { name: "Build prompt" }).click();
+  await expect(buildStatus(page)).toHaveText("Paste some messages first.");
+
+  const first = "FAKE_REPLY:Name: Grump|Voice: a grumpy uncle.\nugh. kids these days";
+  await messagesField(page).fill(first);
+  await page.getByRole("button", { name: "Build prompt" }).click();
+  await expect(buildStatus(page)).toHaveText("Built. Try it, then save.");
+  await expect(nameField(page)).toHaveValue("Grump");
+  await expect(promptField(page)).toHaveValue("Voice: a grumpy uncle.");
+  await save(page);
+
+  await page.reload();
+  await open(page, "Grump");
+  await expect(messagesField(page)).toHaveValue(first);
+  await messagesField(page).fill(`${first}\nback in my day we walked`);
+  const sent = page.waitForRequest("**/api/admin/build");
+  await page.getByRole("button", { name: "Rebuild prompt" }).click();
+  expect((await sent).postDataJSON()).toMatchObject({
+    name: "Grump",
+    prompt: "Voice: a grumpy uncle.",
+    messages: `${first}\nback in my day we walked`,
+  });
+  await expect(buildStatus(page)).toHaveText("Built. Try it, then save.");
+  await expect(nameField(page)).toHaveValue("Grump");
+});
+
+test("a failed build says so and changes nothing", async ({ page }) => {
+  await signIn(page);
+  await messagesField(page).fill("FAIL_CLAUDE");
+  await page.getByRole("button", { name: "Rebuild prompt" }).click();
+  await expect(buildStatus(page)).toHaveText("Claude failed on this one. Try again.");
+  await expect(promptField(page)).toHaveValue(seed.personalities[0].prompt);
+});
+
+test("a remembered personality that was removed falls back to the first one", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("radio", { name: "Caveman" }).check();
   await signIn(page);
-  await page.getByRole("button", { name: "Remove Caveman" }).click();
+  await open(page, "Caveman");
+  await page.getByRole("button", { name: "Remove" }).click();
   await save(page);
   await page.goto("/");
   await expect(page.getByRole("radio", { name: "Blunt" })).toBeChecked();
 });
 
-test("an open page whose style was removed says to reload", async ({ page, browser }) => {
+test("an open page whose personality was removed says to reload", async ({ page, browser }) => {
   await page.goto("/");
   await page.getByRole("radio", { name: "Caveman" }).check();
   const admin = await browser.newPage();
   await signIn(admin);
-  await admin.getByRole("button", { name: "Remove Caveman" }).click();
+  await open(admin, "Caveman");
+  await admin.getByRole("button", { name: "Remove" }).click();
   await save(admin);
   await admin.close();
   await paste(page, HARD);
-  await expect(page.locator("#status")).toHaveText("That style is gone. Reload the page for the new ones.");
+  await expect(page.locator("#status")).toHaveText("That personality is gone. Reload the page for the new ones.");
 });
 
 test("an older version can be loaded and saved again", async ({ page }) => {
   await signIn(page);
-  await nameOf(page, 1).fill("Brutal");
+  await nameField(page).fill("Brutal");
   await save(page);
   const older = page.locator("#versions li").nth(1);
   await expect(older).toContainText("Blunt, Teacher, Caveman");
   await older.getByRole("button", { name: /^Load version/ }).click();
-  await expect(nameOf(page, 1)).toHaveValue("Blunt");
+  await expect(nameField(page)).toHaveValue("Blunt");
   await expect(saveStatus(page)).toHaveText(/^Loaded version \d+\. Save to make it live\.$/);
   await page.getByRole("button", { name: "Discard" }).click();
-  await expect(nameOf(page, 1)).toHaveValue("Brutal");
+  await expect(nameField(page)).toHaveValue("Brutal");
   await older.getByRole("button", { name: /^Load version/ }).click();
   await save(page);
   await page.goto("/");
@@ -148,11 +222,11 @@ test("a save after someone else's asks before it replaces theirs", async ({ page
   await signIn(page);
   const other = await browser.newPage();
   await signIn(other);
-  await nameOf(other, 1).fill("Theirs");
+  await nameField(other).fill("Theirs");
   await save(other);
   await other.close();
 
-  await nameOf(page, 1).fill("Mine");
+  await nameField(page).fill("Mine");
   await page.getByRole("button", { name: "Save for everyone" }).click();
   await expect(saveStatus(page)).toHaveText(
     /^Someone saved version \d+ while you were editing\. Save again to replace it with yours\.$/,
@@ -162,12 +236,16 @@ test("a save after someone else's asks before it replaces theirs", async ({ page
   await expect(page.locator("#versions li").first()).toContainText("Mine");
 });
 
-test("a broken draft is explained and not saved", async ({ page }) => {
+test("a broken draft is explained, opens the personality it is about, and is not saved", async ({ page }) => {
   await signIn(page);
-  await nameOf(page, 2).fill("Blunt");
+  await open(page, "Teacher");
+  await nameField(page).fill("Blunt");
+  await open(page, "Shared rules");
   await page.getByRole("button", { name: "Save for everyone" }).click();
-  await expect(saveStatus(page)).toHaveText('Two styles are called "Blunt".');
+  await expect(saveStatus(page)).toHaveText('Two personalities are called "Blunt".');
   await expect(saveStatus(page)).toHaveAttribute("data-tone", "error");
+  await expect(picker(page).getByRole("listitem").nth(1).getByRole("button")).toHaveAttribute("aria-current");
+  await expect(nameField(page)).toBeVisible();
 });
 
 test("signing out ends the session", async ({ page }) => {
@@ -180,6 +258,7 @@ test("signing out ends the session", async ({ page }) => {
 
 test("the admin page fits the screen without sideways scrolling", async ({ page }) => {
   await signIn(page);
+  await page.getByRole("button", { name: "+ New personality" }).click();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });

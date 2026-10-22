@@ -12,16 +12,16 @@
     <script type="module" src="admin.js"></script>
   </head>
   <body>
-    <header class="top">
+    <header class="top admin-top">
       <a class="brand" href="/">
         <img src="favicon.svg" alt="" width="28" height="28" />
         <span>easywords</span>
       </a>
-      <p class="tagline">Admin</p>
-      <button id="signout" class="admin-link" type="button" hidden>Sign out</button>
+      <span class="admin-badge">Admin</span>
+      <button id="signout" class="copy signout" type="button" hidden>Sign out</button>
     </header>
 
-    <main>
+    <main class="admin">
       <form id="signin" class="card signin" hidden>
         <h1>Sign in</h1>
         <label for="hassword">Hassword</label>
@@ -31,31 +31,78 @@
       </form>
 
       <div id="editor" class="editor" hidden>
-        <div class="editor-main">
-          <section class="card" aria-labelledby="rules-title">
-            <div class="card-head">
-              <h2 id="rules-title">Shared rules</h2>
-              <span id="rules-count" class="count"></span>
-            </div>
-            <p class="hint">Every style's prompt starts with these.</p>
-            <textarea id="rules" aria-labelledby="rules-title" spellcheck="false"></textarea>
-          </section>
+        <nav class="picker" aria-label="What to edit">
+          <button id="pick-rules" class="pick" type="button">
+            <span class="pick-name">Shared rules</span><span class="pick-dot" hidden></span>
+          </button>
+          <p class="picker-title">Personalities</p>
+          <ol id="pick-list" class="pick-list"></ol>
+          <div class="picker-actions">
+            <button id="add" class="pick pick-add" type="button">+ New personality</button>
+            <button id="add-from-messages" class="pick pick-add" type="button">+ From messages</button>
+          </div>
+        </nav>
 
-          <section class="card" aria-labelledby="styles-title">
-            <div class="card-head">
-              <h2 id="styles-title">Styles</h2>
-              <button id="add" class="copy" type="button">Add style</button>
-            </div>
-            <p class="hint">The first one is picked when someone comes to the site.</p>
-            <ol id="style-list" class="style-list"></ol>
-          </section>
-        </div>
+        <section id="rules-panel" class="card panel" aria-labelledby="rules-title" hidden>
+          <div class="card-head">
+            <h2 id="rules-title">Shared rules</h2>
+            <span id="rules-count" class="count"></span>
+          </div>
+          <p class="hint">Every personality's prompt starts with these.</p>
+          <textarea id="rules" aria-labelledby="rules-title" spellcheck="false"></textarea>
+        </section>
 
-        <aside class="editor-side">
+        <section id="personality-panel" class="card panel" aria-labelledby="personality-title" hidden>
+          <div class="card-head">
+            <h2 id="personality-title"></h2>
+            <div class="panel-actions">
+              <button id="move-up" class="copy icon" type="button" aria-label="Move up" title="Move up">↑</button>
+              <button id="move-down" class="copy icon" type="button" aria-label="Move down" title="Move down">↓</button>
+              <button id="remove" class="copy" type="button">Remove</button>
+            </div>
+          </div>
+          <p id="personality-place" class="hint"></p>
+
+          <div class="field">
+            <div class="field-head">
+              <label for="name">Name</label>
+              <span id="personality-id" class="personality-id"></span>
+            </div>
+            <input id="name" autocomplete="off" placeholder="Name on the button" />
+          </div>
+
+          <div class="field">
+            <div class="field-head">
+              <label for="prompt">Prompt</label>
+              <span id="prompt-count" class="count"></span>
+            </div>
+            <textarea id="prompt" spellcheck="false" placeholder="Voice: who talks, and how…"></textarea>
+          </div>
+
+          <div class="field messages">
+            <div class="field-head">
+              <label for="messages">Messages</label>
+              <span id="messages-count" class="count"></span>
+            </div>
+            <p class="hint">
+              Paste messages from someone, then build a prompt that talks like them. They stay here, so you can paste
+              more later and build again.
+            </p>
+            <textarea id="messages" spellcheck="false" placeholder="Paste chat messages…"></textarea>
+            <div class="field-foot">
+              <span id="build-status" class="status" role="status"></span>
+              <button id="build" class="run" type="button"><span class="run-label">Build prompt</span></button>
+            </div>
+          </div>
+        </section>
+
+        <aside class="side">
           <section class="card" aria-labelledby="try-title">
             <div class="card-head">
-              <h2 id="try-title">Try before saving</h2>
-              <select id="try-style" aria-label="Style to try"></select>
+              <h2 id="try-title">Try <span id="try-name" class="try-name"></span></h2>
+              <output id="try-score" class="score" data-state="empty" aria-live="polite">
+                <span class="score-label">Easy score</span><span class="score-value">–</span>
+              </output>
             </div>
             <textarea
               id="try-input"
@@ -65,9 +112,7 @@
               placeholder="Paste some fancy text…"
             ></textarea>
             <div class="card-foot">
-              <output id="try-score" class="score" data-state="empty" aria-live="polite">
-                <span class="score-label">Easy score</span><span class="score-value">–</span>
-              </output>
+              <span id="try-status" class="status" role="status"></span>
               <button id="try" class="run" type="button"><span class="run-label">Try</span></button>
             </div>
             <textarea
@@ -77,7 +122,6 @@
               readonly
               placeholder="The result shows up here. Nothing is saved."
             ></textarea>
-            <p id="try-status" class="status card-status" role="status"></p>
           </section>
 
           <section class="card" aria-labelledby="versions-title">
@@ -89,7 +133,7 @@
           </section>
         </aside>
 
-        <div class="savebar">
+        <div id="savebar" class="savebar" hidden>
           <span id="save-status" class="status" role="status"></span>
           <button id="discard" class="copy" type="button">Discard</button>
           <button id="save" class="run" type="button"><span class="run-label">Save for everyone</span></button>

@@ -1,6 +1,6 @@
 // Stands in for the Jev and Anthropic APIs so tests never use real tokens.
 // Text containing a marker word changes the reply: FAIL_CLAUDE, FAIL_JEV, SLOW_CLAUDE.
-// A system prompt containing FAKE_REPLY:<words> makes those words the rewrite.
+// A system prompt or text containing FAKE_REPLY:<words> makes those words the reply, with "|" as a line break.
 import { createServer } from "node:http";
 
 const port = Number(process.env.FAKE_UPSTREAM_PORT ?? 8787);
@@ -49,8 +49,8 @@ async function messages(body, response) {
     },
   });
   sse(response, { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
-  const reply = /FAKE_REPLY:([^\n"\\]+)/.exec(JSON.stringify(body.system ?? ""))?.[1];
-  for (const text of reply ? [reply] : REWRITE) {
+  const reply = /FAKE_REPLY:([^\n"\\]+)/.exec(JSON.stringify([body.system ?? "", body.messages]))?.[1];
+  for (const text of reply ? [reply.replaceAll("|", "\n")] : REWRITE) {
     await sleep(delay);
     sse(response, { type: "content_block_delta", index: 0, delta: { type: "text_delta", text } });
   }

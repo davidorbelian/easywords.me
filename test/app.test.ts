@@ -4,10 +4,11 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Admin } from "../src/server/admin.ts";
 import { createApp, defaultLimits, type Limits } from "../src/server/app.ts";
+import { BUILD_PROMPT, buildInput } from "../src/server/build.ts";
 import type { Rewriter } from "../src/server/claude.ts";
 import type { Scorer } from "../src/server/jev.ts";
 import { DailyCap, Slots, WindowLimit } from "../src/server/limits.ts";
-import { StyleStore } from "../src/server/styles.ts";
+import { PersonalityStore } from "../src/server/personalities.ts";
 
 const HASSWORD = "correct horse battery";
 
@@ -19,12 +20,12 @@ const rewriter: Rewriter = async function* () {
 };
 
 let dir: string;
-let store: StyleStore;
+let store: PersonalityStore;
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "easywords-app-"));
-  store = await StyleStore.open(dir);
-  await writeFile(join(dir, "index.html"), "<header><!-- admin --></header><div><!-- styles --></div>");
+  store = await PersonalityStore.open(dir);
+  await writeFile(join(dir, "index.html"), "<header><!-- admin --></header><div><!-- personalities --></div>");
   await writeFile(join(dir, "admin.html"), "<p>admin page</p>");
 });
 
@@ -84,7 +85,7 @@ describe("POST /api/score", () => {
 
 describe("POST /api/simplify", () => {
   it("streams the text, then the output score", async () => {
-    const response = await app().request(post("/api/simplify", { text: "Hard words.", style: "teacher" }));
+    const response = await app().request(post("/api/simplify", { text: "Hard words.", personality: "teacher" }));
     expect(response.headers.get("content-type")).toContain("text/event-stream");
     expect(await response.text()).toBe(
       'event: text\ndata: {"text":"Easy "}\n\n' +
@@ -93,21 +94,21 @@ describe("POST /api/simplify", () => {
     );
   });
 
-  it("gives the rewriter the shared rules and the style's prompt", async () => {
+  it("gives the rewriter the shared rules and the personality's prompt", async () => {
     let seen = "";
     const spy: Rewriter = async function* (_text, system) {
       seen = system;
       yield "x";
     };
-    await (await app({ rewriter: spy }).request(post("/api/simplify", { text: "a", style: "caveman" }))).text();
-    const { rules, styles } = store.current();
-    expect(seen).toBe(`${rules}\n\n${styles[2]!.prompt}`);
+    await (await app({ rewriter: spy }).request(post("/api/simplify", { text: "a", personality: "caveman" }))).text();
+    const { rules, personalities } = store.current();
+    expect(seen).toBe(`${rules}\n\n${personalities[2]!.prompt}`);
   });
 
-  it("rejects an unknown style", async () => {
-    const response = await app().request(post("/api/simplify", { text: "a", style: "hardest" }));
+  it("rejects an unknown personality", async () => {
+    const response = await app().request(post("/api/simplify", { text: "a", personality: "hardest" }));
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: "bad_style" });
+    expect(await response.json()).toEqual({ error: "bad_personality" });
   });
 
   it("sends a failed event when Claude fails", async () => {
@@ -116,7 +117,7 @@ describe("POST /api/simplify", () => {
       throw new Error("boom");
     };
     const body = await (
-      await app({ rewriter: failing }).request(post("/api/simplify", { text: "a", style: "blunt" }))
+      await app({ rewriter: failing }).request(post("/api/simplify", { text: "a", personality: "blunt" }))
     ).text();
     expect(body).toContain("event: failed");
     expect(body).not.toContain("event: done");
@@ -127,22 +128,22 @@ describe("POST /api/simplify", () => {
       throw new Error("down");
     };
     const body = await (
-      await app({ scorer: failing }).request(post("/api/simplify", { text: "a", style: "blunt" }))
+      await app({ scorer: failing }).request(post("/api/simplify", { text: "a", personality: "blunt" }))
     ).text();
     expect(body).toContain('event: done\ndata: {"score":null}');
   });
 
   it("stops at the daily cap", async () => {
     const instance = app({ limits: { daily: new DailyCap(1) } });
-    await (await instance.request(post("/api/simplify", { text: "a", style: "blunt" }))).text();
-    const response = await instance.request(post("/api/simplify", { text: "a", style: "blunt" }, "9.9.9.9"));
+    await (await instance.request(post("/api/simplify", { text: "a", personality: "blunt" }))).text();
+    const response = await instance.request(post("/api/simplify", { text: "a", personality: "blunt" }, "9.9.9.9"));
     expect(response.status).toBe(429);
     expect(await response.json()).toEqual({ error: "daily_limit" });
   });
 
   it("answers busy when no slot frees up", async () => {
     const instance = app({ limits: { slots: new Slots(0, 0, 0) } });
-    const response = await instance.request(post("/api/simplify", { text: "a", style: "blunt" }));
+    const response = await instance.request(post("/api/simplify", { text: "a", personality: "blunt" }));
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: "busy" });
   });
@@ -156,18 +157,18 @@ describe("GET /health", () => {
 });
 
 describe("GET /", () => {
-  it("shows the styles, the first one picked, and the admin link", async () => {
+  it("shows the personalities, the first one picked, and the admin link", async () => {
     const page = await (await app().request("/")).text();
     expect(page).toBe(
       '<header><a class="admin-link" href="/admin">Admin</a></header><div>' +
-        '<label><input type="radio" name="style" value="blunt" checked /><span>Blunt</span></label>' +
-        '<label><input type="radio" name="style" value="teacher" /><span>Teacher</span></label>' +
-        '<label><input type="radio" name="style" value="caveman" /><span>Caveman</span></label></div>',
+        '<label><input type="radio" name="personality" value="blunt" checked /><span>Blunt</span></label>' +
+        '<label><input type="radio" name="personality" value="teacher" /><span>Teacher</span></label>' +
+        '<label><input type="radio" name="personality" value="caveman" /><span>Caveman</span></label></div>',
     );
   });
 
-  it("escapes style names", async () => {
-    await store.save({ rules: "", styles: [{ name: '<b>"Bold"</b>', prompt: "p" }] }, 1);
+  it("escapes personality names", async () => {
+    await store.save({ rules: "", personalities: [{ name: '<b>"Bold"</b>', prompt: "p", messages: "" }] }, 1);
     expect(await (await app().request("/")).text()).toContain("&#60;b&#62;&#34;Bold&#34;&#60;/b&#62;");
   });
 
@@ -176,18 +177,34 @@ describe("GET /", () => {
   });
 });
 
+describe("built files", () => {
+  it("lets browsers keep files with a hash in the name for good", async () => {
+    await writeFile(join(dir, "styles-7QBF3AEI.css"), "body {}");
+    const response = await app().request("/styles-7QBF3AEI.css");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+  });
+
+  it("makes browsers check pages and files without a hash every time", async () => {
+    await writeFile(join(dir, "favicon.svg"), "<svg/>");
+    for (const path of ["/", "/admin", "/favicon.svg"]) {
+      expect((await app().request(path)).headers.get("cache-control"), path).toBe("no-cache");
+    }
+  });
+});
+
 describe("admin", () => {
   async function signIn(instance = app(), headers: Record<string, string> = {}) {
     const response = await instance.request(post("/api/admin/signin", { hassword: HASSWORD }, "1.2.3.4", headers));
     expect(response.status).toBe(204);
     const cookie = response.headers.get("set-cookie")!.split(";")[0]!;
-    const loaded = await instance.request("/api/admin/styles", { headers: { Cookie: cookie } });
+    const loaded = await instance.request("/api/admin/personalities", { headers: { Cookie: cookie } });
     const { token } = (await loaded.json()) as { token: string };
     return { instance, cookie, token, setCookie: response.headers.get("set-cookie")! };
   }
 
   function put(body: unknown, cookie: string, token: string) {
-    return new Request("http://localhost/api/admin/styles", {
+    return new Request("http://localhost/api/admin/personalities", {
       method: "PUT",
       headers: { "Content-Type": "application/json", Cookie: cookie, "X-Form-Token": token },
       body: JSON.stringify(body),
@@ -229,16 +246,18 @@ describe("admin", () => {
     expect(tunnel.setCookie).toMatch(/Secure/);
   });
 
-  it("needs a session to read the styles", async () => {
-    const response = await app().request("/api/admin/styles");
+  it("needs a session to read the personalities", async () => {
+    const response = await app().request("/api/admin/personalities");
     expect(response.status).toBe(401);
-    const forged = await app().request("/api/admin/styles", { headers: { Cookie: "easywords_admin=1.abc" } });
+    const forged = await app().request("/api/admin/personalities", { headers: { Cookie: "easywords_admin=1.abc" } });
     expect(forged.status).toBe(401);
   });
 
   it("lists the versions, newest first", async () => {
     const { instance, cookie } = await signIn();
-    const body = (await (await instance.request("/api/admin/styles", { headers: { Cookie: cookie } })).json()) as {
+    const body = (await (
+      await instance.request("/api/admin/personalities", { headers: { Cookie: cookie } })
+    ).json()) as {
       versions: { number: number }[];
     };
     expect(body.versions.map((version) => version.number)).toEqual([1]);
@@ -246,20 +265,28 @@ describe("admin", () => {
 
   it("saves a new version that users get at once", async () => {
     const { instance, cookie, token } = await signIn();
-    const styles = [{ name: "Pirate", prompt: "Voice: a pirate." }, ...store.current().styles];
-    const response = await instance.request(put({ basedOn: 1, rules: "Be rude.", styles }, cookie, token));
+    const personalities = [
+      { name: "Pirate", prompt: "Voice: a pirate.", messages: "" },
+      ...store.current().personalities,
+    ];
+    const response = await instance.request(put({ basedOn: 1, rules: "Be rude.", personalities }, cookie, token));
     expect(response.status).toBe(200);
-    const { versions } = (await response.json()) as { versions: { number: number; styles: { id: string }[] }[] };
+    const { versions } = (await response.json()) as { versions: { number: number; personalities: { id: string }[] }[] };
     expect(versions[0]!.number).toBe(2);
-    expect(versions[0]!.styles.map((style) => style.id)).toEqual(["pirate", "blunt", "teacher", "caveman"]);
+    expect(versions[0]!.personalities.map((personality) => personality.id)).toEqual([
+      "pirate",
+      "blunt",
+      "teacher",
+      "caveman",
+    ]);
     expect(await (await instance.request("/")).text()).toContain('value="pirate" checked');
   });
 
   it("refuses a save based on an old version", async () => {
     const { instance, cookie, token } = await signIn();
-    const { rules, styles } = store.current();
-    expect((await instance.request(put({ basedOn: 1, rules, styles }, cookie, token))).status).toBe(200);
-    const stale = await instance.request(put({ basedOn: 1, rules: "mine", styles }, cookie, token));
+    const { rules, personalities } = store.current();
+    expect((await instance.request(put({ basedOn: 1, rules, personalities }, cookie, token))).status).toBe(200);
+    const stale = await instance.request(put({ basedOn: 1, rules: "mine", personalities }, cookie, token));
     expect(stale.status).toBe(409);
     expect(((await stale.json()) as { error: string }).error).toBe("conflict");
     expect(store.current().number).toBe(2);
@@ -267,17 +294,17 @@ describe("admin", () => {
 
   it("refuses a change without the form token", async () => {
     const { instance, cookie } = await signIn();
-    const { rules, styles } = store.current();
-    const response = await instance.request(put({ basedOn: 1, rules, styles }, cookie, "wrong"));
+    const { rules, personalities } = store.current();
+    const response = await instance.request(put({ basedOn: 1, rules, personalities }, cookie, "wrong"));
     expect(response.status).toBe(403);
     expect(store.current().number).toBe(1);
   });
 
   it("explains a broken draft", async () => {
     const { instance, cookie, token } = await signIn();
-    const response = await instance.request(put({ basedOn: 1, rules: "", styles: [] }, cookie, token));
+    const response = await instance.request(put({ basedOn: 1, rules: "", personalities: [] }, cookie, token));
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: "bad_styles", message: "Keep at least one style." });
+    expect(await response.json()).toEqual({ error: "bad_personalities", message: "Keep at least one personality." });
   });
 
   it("tries a prompt without saving it", async () => {
@@ -296,6 +323,66 @@ describe("admin", () => {
     expect(await response.text()).toContain('event: done\ndata: {"score":4}');
     expect(seen).toBe("Rules.\n\nVoice: a pirate.");
     expect(store.current().number).toBe(1);
+  });
+
+  describe("POST /api/admin/build", () => {
+    const body = { rules: "Rules.", name: "", prompt: "", messages: "lol ok" };
+
+    async function build(rewriter: Rewriter, sent: unknown = body) {
+      const { instance, cookie, token } = await signIn(app({ rewriter }));
+      return instance.request(post("/api/admin/build", sent, "1.2.3.4", { Cookie: cookie, "X-Form-Token": token }));
+    }
+
+    it("answers the name and the prompt Claude wrote, and saves nothing", async () => {
+      let seen = { text: "", system: "" };
+      const spy: Rewriter = async function* (text, system) {
+        seen = { text, system };
+        yield "Name: Chill ";
+        yield "Guy\nVoice: lol ok.";
+      };
+      const response = await build(spy, { ...body, name: "Old", prompt: "Voice: old." });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ name: "Chill Guy", prompt: "Voice: lol ok." });
+      expect(seen.system).toBe(BUILD_PROMPT);
+      expect(seen.text).toBe(buildInput("Rules.", "Old", "Voice: old.", "lol ok"));
+      expect(store.current().number).toBe(1);
+    });
+
+    it.each([
+      [{ ...body, messages: " " }, "empty"],
+      [{ ...body, messages: "m".repeat(20001) }, "too_long"],
+      [{ ...body, prompt: undefined }, "bad_prompt"],
+    ])("refuses %j", async (sent, error) => {
+      const response = await build(rewriter, sent);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error });
+    });
+
+    it.each([
+      [
+        "fails",
+        async function* () {
+          yield "Name: X\n";
+          throw new Error("Claude failed");
+        } satisfies Rewriter,
+      ],
+      [
+        "answers in another shape",
+        async function* () {
+          yield "Sure! Here is a prompt.";
+        } satisfies Rewriter,
+      ],
+    ])("says the build failed when Claude %s", async (_, failing) => {
+      const response = await build(failing);
+      expect(response.status).toBe(502);
+      expect(await response.json()).toEqual({ error: "build_failed" });
+    });
+
+    it("needs the form token", async () => {
+      const { instance, cookie } = await signIn();
+      const response = await instance.request(post("/api/admin/build", body, "1.2.3.4", { Cookie: cookie }));
+      expect(response.status).toBe(403);
+    });
   });
 
   it("signs out", async () => {
