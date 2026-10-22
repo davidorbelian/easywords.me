@@ -71,3 +71,28 @@ jobs:
         env:
           IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}@${{ steps.push.outputs.digest }}
         run: printf '%s\n' "$IMAGE" >> "$GITHUB_STEP_SUMMARY"
+
+      # Deploys the image: infra merges the pin once its checks pass (see AGENTS.md).
+      - if: github.event_name == 'push'
+        id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.INFRA_BUMP_CLIENT_ID }}
+          private-key: ${{ secrets.INFRA_BUMP_APP_KEY }}
+          owner: davidorbelian
+          repositories: infra
+          permission-contents: write
+          permission-pull-requests: write
+      - if: github.event_name == 'push'
+        uses: actions/checkout@v7
+        with:
+          repository: davidorbelian/infra
+          token: ${{ steps.app.outputs.token }}
+          path: infra
+      - if: github.event_name == 'push'
+        name: Pin the image in infra
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+          IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}@${{ steps.push.outputs.digest }}
+        run: bash scripts/bump-infra.sh "$IMAGE"

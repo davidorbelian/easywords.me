@@ -55,7 +55,27 @@ Copy `.env.example` to `.env` for `make dev`. Never commit or print token values
 ## Shipping
 
 - The repo is public so CI minutes are free. GHCR gives the image `ghcr.io/davidorbelian/easywords.me` the repo's visibility, so it is public too. It holds no secrets.
-- CI runs on pushes to main and on PRs. On main it pushes the image and writes the `tag@digest` pin to the job summary.
 - `davidorbelian/infra` owns DNS, secrets, the server and the image pin. This repo only builds the image.
 - The image needs a writable `/data` for the `node` user, and keeps no state anywhere else.
   A change to what it needs from the server is an infra pull request, merged before the image that needs it.
+
+### A merge to `main` deploys
+
+Every push to `main` that changes more than `*.md` files goes to production on its own. Merge only what may go live now.
+
+1. CI runs the checks and the browser tests against the image, then pushes `ghcr.io/davidorbelian/easywords.me:<commit>`.
+2. `scripts/bump-infra.sh` pins it, as `repo:tag@sha256:digest`, in infra's `projects/easywords/envs/prod/images.json`.
+   It pushes the branch `bump/easywords-prod`, opens "Run easywords at `<commit>`" and turns on auto-merge.
+   A newer push replaces a pin that is still waiting.
+3. infra's required check `bump` lets that pull request change only this pin, to an image GHCR has. Then it merges itself.
+4. The merge deploys the server, and the stack `easywords-prod` pulls the new image.
+
+The token for step 2 comes from infra's GitHub App `david-orbelian-infra`: the repo variable `INFRA_BUMP_CLIENT_ID`
+and the secret `INFRA_BUMP_APP_KEY`. The reasons are in infra's `docs/adr/0002`, `0005` and `0019`.
+
+- **CI failed before the push**: nothing was deployed. Fix it on `main`.
+- **The infra pull request did not merge**: see https://github.com/davidorbelian/infra/pulls?q=head%3Abump%2Feasywords-prod.
+  Its `bump` check says what it refused.
+- **The new image is broken**: revert its "Run easywords at ..." commit in infra, in a pull request.
+  The merge deploys the previous image at once. A revert here works too, but it builds and tests a new image first.
+  So keep `/data` readable by the previous image.
