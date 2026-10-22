@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin · easywords</title>
+    <meta name="robots" content="noindex" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="admin.css" />
+    <script type="module" src="admin.js"></script>
+  </head>
+  <body>
+    <header class="top">
+      <a class="brand" href="/">
+        <img src="favicon.svg" alt="" width="28" height="28" />
+        <span>easywords</span>
+      </a>
+      <p class="tagline">Admin</p>
+      <button id="signout" class="admin-link" type="button" hidden>Sign out</button>
+    </header>
+
+    <main>
+      <form id="signin" class="card signin" hidden>
+        <h1>Sign in</h1>
+        <label for="hassword">Hassword</label>
+        <input id="hassword" type="password" autocomplete="current-password" required />
+        <button class="run" type="submit"><span class="run-label">Sign in</span></button>
+        <p id="signin-status" class="status" role="status"></p>
+      </form>
+
+      <div id="editor" class="editor" hidden>
+        <div class="editor-main">
+          <section class="card" aria-labelledby="rules-title">
+            <div class="card-head">
+              <h2 id="rules-title">Shared rules</h2>
+              <span id="rules-count" class="count"></span>
+            </div>
+            <p class="hint">Every style's prompt starts with these.</p>
+            <textarea id="rules" aria-labelledby="rules-title" spellcheck="false"></textarea>
+          </section>
+
+          <section class="card" aria-labelledby="styles-title">
+            <div class="card-head">
+              <h2 id="styles-title">Styles</h2>
+              <button id="add" class="copy" type="button">Add style</button>
+            </div>
+            <p class="hint">The first one is picked when someone comes to the site.</p>
+            <ol id="style-list" class="style-list"></ol>
+          </section>
+        </div>
+
+        <aside class="editor-side">
+          <section class="card" aria-labelledby="try-title">
+            <div class="card-head">
+              <h2 id="try-title">Try before saving</h2>
+              <select id="try-style" aria-label="Style to try"></select>
+            </div>
+            <textarea
+              id="try-input"
+              class="try-text"
+              aria-label="Sample text"
+              spellcheck="false"
+              placeholder="Paste some fancy text…"
+            ></textarea>
+            <div class="card-foot">
+              <output id="try-score" class="score" data-state="empty" aria-live="polite">
+                <span class="score-label">Easy score</span><span class="score-value">–</span>
+              </output>
+              <button id="try" class="run" type="button"><span class="run-label">Try</span></button>
+            </div>
+            <textarea
+              id="try-output"
+              class="try-text"
+              aria-label="Result"
+              readonly
+              placeholder="The result shows up here. Nothing is saved."
+            ></textarea>
+            <p id="try-status" class="status card-status" role="status"></p>
+          </section>
+
+          <section class="card" aria-labelledby="versions-title">
+            <div class="card-head">
+              <h2 id="versions-title">Versions</h2>
+            </div>
+            <p class="hint">Load one to edit it. It goes live only when you save.</p>
+            <ol id="versions" class="versions"></ol>
+          </section>
+        </aside>
+
+        <div class="savebar">
+          <span id="save-status" class="status" role="status"></span>
+          <button id="discard" class="copy" type="button">Discard</button>
+          <button id="save" class="run" type="button"><span class="run-label">Save for everyone</span></button>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>

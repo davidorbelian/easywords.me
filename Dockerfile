@@ -7,13 +7,14 @@ COPY src/ src/
 RUN npm run build && npm prune --omit=dev
 
 FROM node:26-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1
-ENV NODE_ENV=production PORT=8080 HOME=/tmp
+ENV NODE_ENV=production PORT=8080 HOME=/tmp DATA_DIR=/data
 WORKDIR /app
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules/ node_modules/
 COPY --from=build /app/dist/web/ dist/web/
 COPY src/server/ src/server/
 COPY src/shared/ src/shared/
+RUN mkdir /data && chown node:node /data
 EXPOSE 8080
 USER node
 CMD ["node", "src/server/main.ts"]

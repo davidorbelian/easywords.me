@@ -1,13 +1,15 @@
-import { isLevel, MAX_INPUT_CHARS, type Level } from "../shared/rules.ts";
+import { MAX_INPUT_CHARS } from "../shared/rules.ts";
+import { readEvents } from "./events.ts";
 
 const SCORE_DELAY_MS = 500;
-const LEVEL_KEY = "easywords.level";
+const STYLE_KEY = "easywords.style";
 
 const MESSAGES: Record<string, string> = {
   empty: "Paste some text first. We can't roast nothing.",
   too_long: `Nobody reads that much, not even us. Keep it under ${MAX_INPUT_CHARS.toLocaleString("en")} characters.`,
   daily_limit: "That's enough truth for one day. Come back tomorrow.",
   busy: "Too many people are being rude right now. Try again in a moment.",
+  bad_style: "That style is gone. Reload the page for the new ones.",
   failed: "Well, shit. We broke it. Please try again.",
 };
 
@@ -23,7 +25,7 @@ const count = element<HTMLSpanElement>("count");
 const status = element<HTMLSpanElement>("status");
 const run = element<HTMLButtonElement>("run");
 const copy = element<HTMLButtonElement>("copy");
-const levels = document.querySelectorAll<HTMLInputElement>('input[name="level"]');
+const styles = document.querySelectorAll<HTMLInputElement>('input[name="style"]');
 
 let scoreRequest: AbortController | undefined;
 let scoreTimer: ReturnType<typeof setTimeout> | undefined;
@@ -50,9 +52,8 @@ function showStatus(text: string, tone: "info" | "error" = "info"): void {
   status.dataset.tone = tone;
 }
 
-function selectedLevel(): Level {
-  const checked = document.querySelector<HTMLInputElement>('input[name="level"]:checked');
-  return isLevel(checked?.value) ? checked.value : "simple";
+function selectedStyle(): string {
+  return document.querySelector<HTMLInputElement>('input[name="style"]:checked')?.value ?? "";
 }
 
 function updateCount(): void {
@@ -105,28 +106,6 @@ function setBusy(busy: boolean): void {
   output.setAttribute("aria-busy", String(busy));
 }
 
-async function* readEvents(response: Response): AsyncGenerator<{ event: string; data: string }> {
-  const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
-  let buffer = "";
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) return;
-    buffer += value;
-    let end: number;
-    while ((end = buffer.indexOf("\n\n")) !== -1) {
-      const block = buffer.slice(0, end);
-      buffer = buffer.slice(end + 2);
-      let event = "message";
-      const data: string[] = [];
-      for (const line of block.split("\n")) {
-        if (line.startsWith("event:")) event = line.slice(6).trim();
-        else if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
-      }
-      yield { event, data: data.join("\n") };
-    }
-  }
-}
-
 async function simplify(): Promise<void> {
   const text = input.value;
   if (!text.trim()) {
@@ -152,7 +131,7 @@ async function simplify(): Promise<void> {
     const response = await fetch("/api/simplify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, level: selectedLevel() }),
+      body: JSON.stringify({ text, style: selectedStyle() }),
       signal: request.signal,
     });
     if (!response.ok) {
@@ -194,15 +173,15 @@ async function simplify(): Promise<void> {
   }
 }
 
-function restoreLevel(): void {
+function restoreStyle(): void {
   let saved: string | null = null;
   try {
-    saved = localStorage.getItem(LEVEL_KEY);
+    saved = localStorage.getItem(STYLE_KEY);
   } catch {
-    // Storage can be blocked; the default level is fine then.
+    // Storage can be blocked; the first style is fine then.
   }
-  if (!isLevel(saved)) return;
-  for (const radio of levels) radio.checked = radio.value === saved;
+  const radio = [...styles].find((style) => style.value === saved);
+  if (radio) radio.checked = true;
 }
 
 input.addEventListener("input", () => {
@@ -220,12 +199,12 @@ input.addEventListener("paste", () => {
   });
 });
 
-for (const radio of levels) {
+for (const radio of styles) {
   radio.addEventListener("change", () => {
     try {
-      localStorage.setItem(LEVEL_KEY, radio.value);
+      localStorage.setItem(STYLE_KEY, radio.value);
     } catch {
-      // Not remembering the level is fine.
+      // Not remembering the style is fine.
     }
     if (input.value.trim()) void simplify();
   });
@@ -256,5 +235,5 @@ if (matchMedia("(pointer: fine)").matches) {
   run.querySelector(".run-keys")!.textContent = isMac ? "⌘↵" : "Ctrl ↵";
 }
 
-restoreLevel();
+restoreStyle();
 updateCount();

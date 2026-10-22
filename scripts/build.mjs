@@ -7,11 +7,15 @@ const out = "dist/web";
 await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 const copyStatic = () =>
-  Promise.all(["index.html", "styles.css", "favicon.svg"].map((file) => cp(`src/web/${file}`, `${out}/${file}`)));
+  Promise.all(
+    ["index.html", "admin.html", "styles.css", "admin.css", "favicon.svg"].map((file) =>
+      cp(`src/web/${file}`, `${out}/${file}`),
+    ),
+  );
 
 const options = {
-  entryPoints: ["src/web/main.ts"],
-  outfile: `${out}/main.js`,
+  entryPoints: ["src/web/main.ts", "src/web/admin.ts"],
+  outdir: out,
   bundle: true,
   format: "esm",
   target: "es2022",
