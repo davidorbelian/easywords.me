@@ -21,6 +21,9 @@ voices and rules in the code are only the first version.
   shared rules. The newest version is live. With no file, `src/server/seed.json` becomes version 1, like any save,
   and after that the file is the only truth. A personality's id comes from its name when it is made and never changes.
   Personalities were once called styles. With only an old `styles.json`, the server copies it over once and leaves it.
+- A personality may keep `messages`: chat messages an admin pasted. `POST /api/admin/build` asks Claude to write a
+  name and a prompt in their voice, and the admin edits, tries and saves it. Rewrites never see the messages.
+  They stay so an admin can paste more later and build again.
 - The server fills the personality buttons and the Admin link into `index.html`, so the page needs no extra request.
 - The admin page `/admin` is on only when `ADMIN_HASSWORD` is set. It works like Gentilik's: one shared hassword,
   then a signed session cookie for 30 days, with the key in `DATA_DIR/admin-key.json`. A new hassword signs everyone
@@ -52,7 +55,7 @@ Copy `.env.example` to `.env` for `make dev`. Never commit or print token values
   The Playwright files are `.cjs`, because that `playwright` is found through `NODE_PATH` and ESM ignores it.
 - `make e2e-image`: the same browser tests against the built amd64 image, as CI runs them.
 - Text containing `FAIL_CLAUDE`, `FAIL_JEV` or `SLOW_CLAUDE` makes the fake upstream fail or slow down.
-  A system prompt containing `FAKE_REPLY:<words>` makes those words the rewrite.
+  A system prompt or text containing `FAKE_REPLY:<words>` makes those words the reply, with `|` as a line break.
 - The admin tests change the personalities every page sees. So they run after the other tests, in one worker,
   and each one starts by saving the seed again.
 

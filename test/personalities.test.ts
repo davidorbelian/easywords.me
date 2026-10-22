@@ -20,10 +20,10 @@ describe("PersonalityStore", () => {
   it("reads the saved versions back", async () => {
     const dir = await temporary();
     const store = await PersonalityStore.open(dir);
-    await store.save({ rules: "r", personalities: [{ name: "Pirate", prompt: "Arr." }] }, 1);
+    await store.save({ rules: "r", personalities: [{ name: "Pirate", prompt: "Arr.", messages: "" }] }, 1);
     const again = await PersonalityStore.open(dir);
     expect(again.versions().map((version) => version.number)).toEqual([2, 1]);
-    expect(again.personality("pirate")).toEqual({ id: "pirate", name: "Pirate", prompt: "Arr." });
+    expect(again.personality("pirate")).toEqual({ id: "pirate", name: "Pirate", prompt: "Arr.", messages: "" });
   });
 
   it(`keeps the last ${KEEP_VERSIONS} versions`, async () => {
@@ -43,6 +43,21 @@ describe("PersonalityStore", () => {
     expect(store.current().number).toBe(2);
   });
 
+  it("reads versions saved before messages were kept as having none", async () => {
+    const dir = await temporary();
+    const version = { number: 3, savedAt: "2026-10-22T00:00:00.000Z", rules: "r" };
+    await writeFile(
+      join(dir, "personalities.json"),
+      JSON.stringify({ versions: [{ ...version, personalities: [{ id: "a", name: "A", prompt: "p" }] }] }),
+    );
+    expect((await PersonalityStore.open(dir)).personality("a")).toEqual({
+      id: "a",
+      name: "A",
+      prompt: "p",
+      messages: "",
+    });
+  });
+
   it("refuses to start on a broken file", async () => {
     const dir = await temporary();
     await writeFile(join(dir, "personalities.json"), JSON.stringify({ versions: [{ number: 1 }] }));
@@ -53,15 +68,25 @@ describe("PersonalityStore", () => {
     const dir = await temporary();
     const old = JSON.stringify({
       versions: [
-        { number: 6, savedAt: "2026-10-21T00:00:00.000Z", rules: "r", styles: [{ id: "a", name: "A", prompt: "p" }] },
-        { number: 7, savedAt: "2026-10-22T00:00:00.000Z", rules: "r", styles: [{ id: "b", name: "B", prompt: "q" }] },
+        {
+          number: 6,
+          savedAt: "2026-10-21T00:00:00.000Z",
+          rules: "r",
+          styles: [{ id: "a", name: "A", prompt: "p", messages: "" }],
+        },
+        {
+          number: 7,
+          savedAt: "2026-10-22T00:00:00.000Z",
+          rules: "r",
+          styles: [{ id: "b", name: "B", prompt: "q", messages: "" }],
+        },
       ],
     });
     await writeFile(join(dir, "styles.json"), old);
     const store = await PersonalityStore.open(dir);
     expect(store.versions().map((version) => version.number)).toEqual([7, 6]);
-    expect(store.personality("b")).toEqual({ id: "b", name: "B", prompt: "q" });
-    await store.save({ rules: "r", personalities: [{ name: "C", prompt: "p" }] }, 7);
+    expect(store.personality("b")).toEqual({ id: "b", name: "B", prompt: "q", messages: "" });
+    await store.save({ rules: "r", personalities: [{ name: "C", prompt: "p", messages: "" }] }, 7);
     expect((await PersonalityStore.open(dir)).current().number).toBe(8);
     expect(await readFile(join(dir, "styles.json"), "utf8")).toBe(old);
   });
@@ -79,10 +104,10 @@ describe("withIds", () => {
     const settings = withIds({
       rules: "",
       personalities: [
-        { id: "pirate", name: "Old pirate", prompt: "p" },
-        { name: "Pirate", prompt: "p" },
-        { name: "Пещерный", prompt: "p" },
-        { name: "Señor  Smart!", prompt: "p" },
+        { id: "pirate", name: "Old pirate", prompt: "p", messages: "" },
+        { name: "Pirate", prompt: "p", messages: "" },
+        { name: "Пещерный", prompt: "p", messages: "" },
+        { name: "Señor  Smart!", prompt: "p", messages: "" },
       ],
     });
     expect(settings.personalities.map((personality) => personality.id)).toEqual([
@@ -95,30 +120,40 @@ describe("withIds", () => {
 });
 
 describe("checkDraft", () => {
-  const personality = { name: "Blunt", prompt: "p" };
+  const personality = { name: "Blunt", prompt: "p", messages: "" };
 
   it.each([
     [{ personalities: [personality] }, "The shared rules are missing."],
     [{ rules: "", personalities: [] }, "Keep at least one personality."],
     [
-      { rules: "", personalities: Array.from({ length: 13 }, (_, i) => ({ name: `S${i}`, prompt: "p" })) },
+      {
+        rules: "",
+        personalities: Array.from({ length: 13 }, (_, i) => ({ name: `S${i}`, prompt: "p", messages: "" })),
+      },
       "Keep at most 12 personalities.",
     ],
-    [{ rules: "", personalities: [{ name: " ", prompt: "p" }] }, "Personality 1 has no name."],
-    [
-      { rules: "", personalities: [personality, { name: "blunt", prompt: "p" }] },
-      'Two personalities are called "blunt".',
-    ],
-    [{ rules: "", personalities: [{ name: "Blunt", prompt: " " }] }, '"Blunt" has no prompt.'],
-    [{ rules: "", personalities: [{ ...personality, id: "Bad Id" }] }, "Personality 1 has a broken id."],
   ])("refuses %j", (draft, error) => {
     expect(checkDraft(draft)).toEqual({ error });
   });
 
-  it("trims names and keeps ids", () => {
-    expect(checkDraft({ rules: "r", personalities: [{ id: "blunt", name: " Blunt ", prompt: "p" }] })).toEqual({
+  it.each([
+    [{ name: " " }, "Personality 2 has no name."],
+    [{ name: "blunt" }, 'Two personalities are called "blunt".'],
+    [{ name: "Teacher", prompt: " " }, '"Teacher" has no prompt.'],
+    [{ name: "Teacher", messages: "m".repeat(20001) }, 'The messages of "Teacher" are longer than 20,000 characters.'],
+    [{ name: "Teacher", messages: undefined }, "Personality 2 is broken."],
+    [{ name: "Teacher", id: "Bad Id" }, "Personality 2 has a broken id."],
+  ])("refuses a second personality like %j, and says which one", (second, error) => {
+    const draft = { rules: "", personalities: [personality, { ...personality, ...second }] };
+    expect(checkDraft(draft)).toEqual({ error, index: 1 });
+  });
+
+  it("trims names and keeps ids and messages", () => {
+    expect(
+      checkDraft({ rules: "r", personalities: [{ id: "blunt", name: " Blunt ", prompt: "p", messages: " m " }] }),
+    ).toEqual({
       rules: "r",
-      personalities: [{ id: "blunt", name: "Blunt", prompt: "p" }],
+      personalities: [{ id: "blunt", name: "Blunt", prompt: "p", messages: " m " }],
     });
   });
 });

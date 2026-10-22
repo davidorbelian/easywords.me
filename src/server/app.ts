@@ -6,8 +6,16 @@ import { bodyLimit } from "hono/body-limit";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { secureHeaders } from "hono/secure-headers";
 import { streamSSE } from "hono/streaming";
-import { checkDraft, MAX_INPUT_CHARS, MAX_PROMPT_CHARS, MAX_RULES_CHARS } from "../shared/rules.ts";
+import {
+  checkDraft,
+  MAX_INPUT_CHARS,
+  MAX_MESSAGES_CHARS,
+  MAX_NAME_CHARS,
+  MAX_PROMPT_CHARS,
+  MAX_RULES_CHARS,
+} from "../shared/rules.ts";
 import { SESSION_SECONDS, type Admin } from "./admin.ts";
+import { BUILD_PROMPT, buildInput, readBuilt } from "./build.ts";
 import { systemPrompt, type Rewriter } from "./claude.ts";
 import type { Scorer } from "./jev.ts";
 import { DailyCap, Slots, WindowLimit } from "./limits.ts";
@@ -97,7 +105,7 @@ export function createApp({ scorer, rewriter, limits, store, admin, webRoot }: A
   const tooLong = (c: Context) => c.json({ error: "too_long" }, 413);
   app.use("/api/score", bodyLimit({ maxSize: 64 * 1024, onError: tooLong }));
   app.use("/api/simplify", bodyLimit({ maxSize: 64 * 1024, onError: tooLong }));
-  app.use("/api/admin/*", bodyLimit({ maxSize: 256 * 1024, onError: tooLong }));
+  app.use("/api/admin/*", bodyLimit({ maxSize: 512 * 1024, onError: tooLong }));
 
   app.post("/api/score", async (c) => {
     const text = readText(await readJson(c));
@@ -167,6 +175,7 @@ export function createApp({ scorer, rewriter, limits, store, admin, webRoot }: A
     app.use("/api/admin/signout", signedIn);
     app.use("/api/admin/personalities", signedIn);
     app.use("/api/admin/try", signedIn);
+    app.use("/api/admin/build", signedIn);
 
     app.post("/api/admin/signout", (c) => {
       deleteCookie(c, COOKIE, { path: "/", secure: secure(c) });
@@ -180,7 +189,8 @@ export function createApp({ scorer, rewriter, limits, store, admin, webRoot }: A
     app.put("/api/admin/personalities", async (c) => {
       const body = (await readJson(c)) as { basedOn?: unknown } | undefined;
       const draft = checkDraft(body);
-      if ("error" in draft) return c.json({ error: "bad_personalities", message: draft.error }, 400);
+      if ("error" in draft)
+        return c.json({ error: "bad_personalities", message: draft.error, index: draft.index }, 400);
       if (!Number.isInteger(body?.basedOn))
         return c.json({ error: "bad_personalities", message: "Reload the page." }, 400);
       try {
@@ -203,6 +213,36 @@ export function createApp({ scorer, rewriter, limits, store, admin, webRoot }: A
       if (typeof prompt !== "string" || !prompt.trim() || prompt.length > MAX_PROMPT_CHARS)
         return c.json({ error: "bad_prompt" }, 400);
       return rewrite(c, text, systemPrompt(rules, prompt));
+    });
+
+    // Writes a name and a prompt in the voice of the messages. Nothing is saved until the admin saves.
+    app.post("/api/admin/build", async (c) => {
+      const body = (await readJson(c)) as Record<string, unknown> | undefined;
+      const { rules, name, prompt, messages } = body ?? {};
+      if (typeof messages !== "string" || !messages.trim()) return c.json({ error: "empty" }, 400);
+      if (messages.length > MAX_MESSAGES_CHARS) return c.json({ error: "too_long" }, 400);
+      if (typeof rules !== "string" || rules.length > MAX_RULES_CHARS) return c.json({ error: "bad_rules" }, 400);
+      if (typeof name !== "string" || name.length > MAX_NAME_CHARS) return c.json({ error: "bad_name" }, 400);
+      if (typeof prompt !== "string" || prompt.length > MAX_PROMPT_CHARS) return c.json({ error: "bad_prompt" }, 400);
+
+      const release = await limits.slots.acquire(c.req.raw.signal);
+      if (!release) return c.json({ error: "busy" }, 503);
+      let reply = "";
+      try {
+        for await (const chunk of rewriter(buildInput(rules, name, prompt, messages), BUILD_PROMPT, c.req.raw.signal))
+          reply += chunk;
+      } catch (error) {
+        console.error("build failed:", error);
+        return c.json({ error: "build_failed" }, 502);
+      } finally {
+        release();
+      }
+      const built = readBuilt(reply);
+      if (!built) {
+        console.error("build reply has no name and prompt:", reply.slice(0, 200));
+        return c.json({ error: "build_failed" }, 502);
+      }
+      return c.json(built);
     });
   }
 

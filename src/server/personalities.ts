@@ -70,13 +70,13 @@ export class PersonalityStore {
 /** Gives each new personality an id made from its name, unique among the others. */
 export function withIds(draft: Draft): Settings {
   const taken = new Set(draft.personalities.flatMap((personality) => (personality.id ? [personality.id] : [])));
-  const personalities = draft.personalities.map(({ id, name, prompt }) => {
-    if (id) return { id, name, prompt };
+  const personalities = draft.personalities.map(({ id, name, prompt, messages }) => {
+    if (id) return { id, name, prompt, messages };
     const base = slug(name) || "personality";
     let unique = base;
     for (let n = 2; taken.has(unique); n++) unique = `${base}-${n}`;
     taken.add(unique);
-    return { id: unique, name, prompt };
+    return { id: unique, name, prompt, messages };
   });
   return { rules: draft.rules, personalities };
 }
@@ -107,11 +107,19 @@ function parse(text: string, file: string): Version[] {
           (personality: Partial<Personality>) =>
             typeof personality.id === "string" &&
             typeof personality.name === "string" &&
-            typeof personality.prompt === "string",
+            typeof personality.prompt === "string" &&
+            (personality.messages === undefined || typeof personality.messages === "string"),
         ),
     );
   if (!valid) throw new Error(`${file} is not a list of personality versions`);
-  return versions as Version[];
+  // Versions saved before messages were kept have none.
+  return (versions as Version[]).map((version) => ({
+    ...version,
+    personalities: version.personalities.map((personality) => ({
+      ...personality,
+      messages: personality.messages ?? "",
+    })),
+  }));
 }
 
 // Personalities were called styles before, in styles.json. That file stays as it was, so the
