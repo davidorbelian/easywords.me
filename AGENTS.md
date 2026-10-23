@@ -70,7 +70,12 @@ Copy `.env.example` to `.env` for `make dev`. Never commit or print token values
 
 Every push to `main` that changes more than `*.md` files goes to production on its own. Merge only what may go live now.
 
-1. CI runs the checks and the browser tests against the image, then pushes `ghcr.io/davidorbelian/easywords.me:<commit>`.
+Two rulesets guard `main`. Every change, even the admin's, comes through a pull request with a green `check`, and
+`main` cannot be force-pushed or deleted. Only the repo admin may merge. Collaborators push branches and open pull
+requests, but their code never sees the infra key, so they cannot deploy.
+
+1. The job `check` runs the checks and the browser tests against the image.
+   Then the job `deploy` pushes `ghcr.io/davidorbelian/easywords.me:<commit>`.
 2. `scripts/bump-infra.sh` pins it, as `repo:tag@sha256:digest`, in infra's `projects/easywords/envs/prod/images.json`.
    It pushes the branch `bump/easywords-prod`, opens "Run easywords at `<commit>`" and turns on auto-merge.
    A newer push replaces a pin that is still waiting.
@@ -78,9 +83,10 @@ Every push to `main` that changes more than `*.md` files goes to production on i
 4. The merge deploys the server, and the stack `easywords-prod` pulls the new image.
 
 The token for step 2 comes from infra's GitHub App `david-orbelian-infra`: the repo variable `INFRA_BUMP_CLIENT_ID`
-and the secret `INFRA_BUMP_APP_KEY`. The reasons are in infra's `docs/adr/0002`, `0005` and `0019`.
+and the secret `INFRA_BUMP_APP_KEY` of the environment `production`. Only `main` may use that environment, so only
+`deploy` reads the key. The reasons are in infra's `docs/adr/0002`, `0005`, `0019` and `0020`.
 
-- **CI failed before the push**: nothing was deployed. Fix it on `main`.
+- **CI failed before the push**: nothing was deployed. Fix it in a pull request.
 - **The infra pull request did not merge**: see https://github.com/davidorbelian/infra/pulls?q=head%3Abump%2Feasywords-prod.
   Its `bump` check says what it refused.
 - **The new image is broken**: revert its "Run easywords at ..." commit in infra, in a pull request.
