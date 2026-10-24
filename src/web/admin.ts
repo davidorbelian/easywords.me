@@ -30,7 +30,6 @@ const editor = element<HTMLDivElement>("editor");
 const pickRules = element<HTMLButtonElement>("pick-rules");
 const pickList = element<HTMLOListElement>("pick-list");
 const add = element<HTMLButtonElement>("add");
-const addFromMessages = element<HTMLButtonElement>("add-from-messages");
 
 const rulesPanel = element<HTMLElement>("rules-panel");
 const rules = element<HTMLTextAreaElement>("rules");
@@ -173,9 +172,7 @@ function renderPicker(): void {
       return row;
     }),
   );
-  const full = items.length >= MAX_PERSONALITIES;
-  add.disabled = full;
-  addFromMessages.disabled = full;
+  add.disabled = items.length >= MAX_PERSONALITIES;
 }
 
 /** Refreshes the picker's name and dot for one item, without rebuilding the list under the cursor. */
@@ -333,12 +330,12 @@ async function load(keepDraft: boolean): Promise<void> {
   }
 }
 
-function addPersonality(focus: HTMLElement): void {
+function addPersonality(): void {
   const item: Item = { key: nextKey++, name: "", prompt: "", messages: "" };
   items.push(item);
   select(item.key);
   edited();
-  focus.focus();
+  name.focus();
 }
 
 function move(by: number): void {
@@ -393,8 +390,7 @@ signout.addEventListener("click", async () => {
 });
 
 pickRules.addEventListener("click", () => select("rules"));
-add.addEventListener("click", () => addPersonality(name));
-addFromMessages.addEventListener("click", () => addPersonality(messages));
+add.addEventListener("click", addPersonality);
 
 rules.addEventListener("input", () => {
   fit(rules);

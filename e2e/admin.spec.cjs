@@ -141,8 +141,7 @@ test("personalities can be added, moved and removed", async ({ page }) => {
 
 test("a personality is built from messages, which stay for the next build", async ({ page }) => {
   await signIn(page);
-  await page.getByRole("button", { name: "+ From messages" }).click();
-  await expect(messagesField(page)).toBeFocused();
+  await page.getByRole("button", { name: "+ New personality" }).click();
   await page.getByRole("button", { name: "Build prompt" }).click();
   await expect(buildStatus(page)).toHaveText("Paste some messages first.");
 
