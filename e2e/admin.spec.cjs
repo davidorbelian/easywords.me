@@ -119,6 +119,30 @@ test("Try uses the open personality, and keeps it while the shared rules are ope
   await expect(page.getByRole("heading", { name: "Try as Caveman" })).toBeVisible();
 });
 
+test("each personality keeps its own Try box, also after a save", async ({ page }) => {
+  await signIn(page);
+  await promptField(page).fill("Voice: FAKE_REPLY:Cat sat.");
+  await page.getByLabel("Sample text").fill(HARD);
+  await page.getByRole("button", { name: "Try", exact: true }).click();
+  await expect(page.getByLabel("Result")).toHaveValue("Cat sat.");
+
+  await open(page, "Teacher");
+  await expect(page.getByLabel("Sample text")).toHaveValue("");
+  await expect(page.getByLabel("Result")).toHaveValue("");
+  await expect(page.locator("#try-score")).toHaveAttribute("data-state", "empty");
+  await page.getByLabel("Sample text").fill("Teacher's own sample.");
+
+  await open(page, "Blunt");
+  await expect(page.getByLabel("Sample text")).toHaveValue(HARD);
+  await expect(page.getByLabel("Result")).toHaveValue("Cat sat.");
+  await expect(page.locator("#try-score")).toHaveAttribute("data-state", "ready");
+
+  await save(page);
+  await expect(page.getByLabel("Result")).toHaveValue("Cat sat.");
+  await open(page, "Teacher");
+  await expect(page.getByLabel("Sample text")).toHaveValue("Teacher's own sample.");
+});
+
 test("personalities can be added, moved and removed", async ({ page }) => {
   await signIn(page);
   await page.getByRole("button", { name: "+ New personality" }).click();

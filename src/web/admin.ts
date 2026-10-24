@@ -12,7 +12,12 @@ import {
 } from "../shared/rules.ts";
 import { readEvents } from "./events.ts";
 
-type Item = { key: number; id?: string; name: string; prompt: string; messages: string };
+type ScoreState = { state: "empty" | "loading" | "failed" } | { state: "ready"; value: number };
+
+/** What a personality's Try box holds. It stays in this page and is never saved. */
+type Trial = { sample: string; result: string; score: ScoreState };
+
+type Item = { key: number; id?: string; name: string; prompt: string; messages: string; trial: Trial };
 
 /** What the middle panel shows: the shared rules, or the personality with this key. */
 type Selected = "rules" | number;
@@ -75,6 +80,8 @@ let selected: Selected | undefined;
 /** The personality Try uses while the shared rules are open. */
 let lastPersonality: number | undefined;
 let tryRequest: AbortController | undefined;
+/** The Try box the running Try writes into. */
+let trying: Trial | undefined;
 let building: number | undefined;
 let note: { text: string; tone: "info" | "error" } | undefined;
 
@@ -129,14 +136,30 @@ function fit(area: HTMLTextAreaElement): void {
   area.style.height = `${area.scrollHeight + area.offsetHeight - area.clientHeight}px`;
 }
 
-/** Shows a saved version, and keeps open what was open when it is still there. */
-function useVersion(version: Version): void {
-  const open = selected === "rules" ? "rules" : current()?.id;
+function emptyTrial(): Trial {
+  return { sample: "", result: "", score: { state: "empty" } };
+}
+
+/**
+ * Shows a saved version. What was open stays open, and each personality keeps its Try box, when they are
+ * still there. A save keeps the order, so a personality that was new is still in its place, now with an id.
+ */
+function useVersion(version: Version, saved = false): void {
+  const before = items;
+  const open = selected === "rules" ? "rules" : current();
+  const last = before.find((item) => item.key === lastPersonality);
+  const find = (personality: Personality, index: number) =>
+    saved ? before[index] : before.find((item) => item.id !== undefined && item.id === personality.id);
   rules.value = version.rules;
-  items = version.personalities.map((personality: Personality) => ({ ...personality, key: nextKey++ }));
+  items = version.personalities.map((personality: Personality, index) => ({
+    ...personality,
+    key: nextKey++,
+    trial: find(personality, index)?.trial ?? emptyTrial(),
+  }));
+  const again = (old: Item | undefined) => items.find((item) => old !== undefined && item.trial === old.trial);
+  lastPersonality = again(last)?.key;
   if (open === "rules") return select("rules");
-  const again = items.find((item) => item.id !== undefined && item.id === open);
-  select((again ?? items[0]!).key);
+  select((again(open) ?? items[0]!).key);
 }
 
 function select(target: Selected): void {
@@ -145,6 +168,7 @@ function select(target: Selected): void {
   showStatus(buildStatus, "");
   renderPicker();
   renderPanel();
+  renderTry();
   update();
 }
 
@@ -209,6 +233,25 @@ function renderPanel(): void {
   messages.value = item.messages;
   fit(prompt);
   fit(messages);
+}
+
+/** Shows the Try box of the personality Try uses. */
+function renderTry(): void {
+  const trial = tried()?.trial ?? emptyTrial();
+  tryInput.value = trial.sample;
+  fit(tryInput);
+  showResult(trial);
+  showStatus(tryStatus, tryRequest && trying === trial ? "Trying…" : "");
+}
+
+function showResult(trial: Trial): void {
+  tryOutput.value = trial.result;
+  fit(tryOutput);
+  const { score } = trial;
+  tryScore.dataset.state = score.state;
+  tryScore.querySelector(".score-value")!.textContent =
+    score.state === "ready" ? String(score.value) : score.state === "loading" ? "··" : "–";
+  if (score.state === "ready") tryScore.style.setProperty("--hue", String(Math.round(score.value * 1.4)));
 }
 
 function renderVersions(): void {
@@ -331,7 +374,7 @@ async function load(keepDraft: boolean): Promise<void> {
 }
 
 function addPersonality(): void {
-  const item: Item = { key: nextKey++, name: "", prompt: "", messages: "" };
+  const item: Item = { key: nextKey++, name: "", prompt: "", messages: "", trial: emptyTrial() };
   items.push(item);
   select(item.key);
   edited();
@@ -454,7 +497,7 @@ save.addEventListener("click", async () => {
       { versions?: Version[]; error?: string; message?: string } | undefined;
     if (response.ok && body?.versions) {
       showVersions(body.versions);
-      useVersion(body.versions[0]!);
+      useVersion(body.versions[0]!, true);
       setNote(`Saved as version ${basedOn}. Everyone sees it now.`);
     } else if (response.status === 409 && body?.versions) {
       showVersions(body.versions);
@@ -517,8 +560,9 @@ build.addEventListener("click", async () => {
 
 tryButton.addEventListener("click", async () => {
   const item = tried();
-  const text = tryInput.value;
   if (!item) return;
+  const { trial } = item;
+  const text = trial.sample;
   if (!text.trim()) {
     showStatus(tryStatus, "Paste some sample text first.", "error");
     tryInput.focus();
@@ -535,10 +579,17 @@ tryButton.addEventListener("click", async () => {
 
   const request = new AbortController();
   tryRequest = request;
-  tryOutput.value = "";
-  fit(tryOutput);
-  setScore("empty");
-  showStatus(tryStatus, "Trying…");
+  trying = trial;
+  // The admin may open another personality meanwhile. The reply still goes to this one's box.
+  const shown = () => tried()?.trial === trial;
+  const show = (score: ScoreState, status?: string, tone?: "info" | "error") => {
+    trial.score = score;
+    if (!shown()) return;
+    showResult(trial);
+    if (status !== undefined) showStatus(tryStatus, status, tone);
+  };
+  trial.result = "";
+  show({ state: "empty" }, "Trying…");
   update();
   try {
     const response = await api(
@@ -549,8 +600,8 @@ tryButton.addEventListener("click", async () => {
     );
     if (!response.ok) {
       if (response.status !== 401)
-        showStatus(
-          tryStatus,
+        show(
+          { state: "empty" },
           response.status === 503 ? "Claude is busy. Try again in a moment." : "That didn't work.",
           "error",
         );
@@ -559,38 +610,32 @@ tryButton.addEventListener("click", async () => {
     let finished = false;
     for await (const { event, data } of readEvents(response)) {
       if (event === "text") {
-        tryOutput.value += (JSON.parse(data) as { text: string }).text;
-        fit(tryOutput);
-        setScore("loading");
+        trial.result += (JSON.parse(data) as { text: string }).text;
+        show({ state: "loading" });
       } else if (event === "done") {
         finished = true;
         const { score } = JSON.parse(data) as { score: number | null };
-        setScore(score === null ? "failed" : "ready", score ?? undefined);
-        showStatus(tryStatus, "");
+        show(score === null ? { state: "failed" } : { state: "ready", value: score }, "");
       } else if (event === "failed") {
         finished = true;
-        setScore("empty");
-        showStatus(tryStatus, "Claude failed on this one. Try again.", "error");
+        show({ state: "empty" }, "Claude failed on this one. Try again.", "error");
       }
     }
     if (!finished) throw new Error("stream ended early");
   } catch {
-    setScore("empty");
-    showStatus(tryStatus, "That didn't work.", "error");
+    show({ state: "empty" }, "That didn't work.", "error");
   } finally {
     tryRequest = undefined;
+    trying = undefined;
     update();
   }
 });
 
-function setScore(state: "empty" | "loading" | "failed" | "ready", value?: number): void {
-  tryScore.dataset.state = state;
-  tryScore.querySelector(".score-value")!.textContent =
-    state === "ready" ? String(value) : state === "loading" ? "··" : "–";
-  if (value !== undefined) tryScore.style.setProperty("--hue", String(Math.round(value * 1.4)));
-}
-
-tryInput.addEventListener("input", () => fit(tryInput));
+tryInput.addEventListener("input", () => {
+  const trial = tried()?.trial;
+  if (trial) trial.sample = tryInput.value;
+  fit(tryInput);
+});
 
 window.addEventListener("beforeunload", (event) => {
   if (!editor.hidden && dirty()) event.preventDefault();
