@@ -4,8 +4,8 @@ on:
   push:
     branches: [main]
     paths-ignore: ["**.md"]
+  # Every pull request runs, because main requires the check before a merge.
   pull_request:
-    paths-ignore: ["**.md"]
 
 permissions:
   contents: read
@@ -15,12 +15,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ci:
+  check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -50,14 +47,25 @@ jobs:
           name: browser-results
           path: test-results/
 
-      - if: github.event_name == 'push'
-        uses: docker/login-action@v4
+  # Only this job can read the infra App key: the environment admits main alone.
+  deploy:
+    if: github.event_name == 'push'
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - if: github.event_name == 'push'
-        id: push
+      - id: push
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -66,15 +74,13 @@ jobs:
           tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha
-      - if: github.event_name == 'push'
-        name: Write the image pin
+      - name: Write the image pin
         env:
           IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}@${{ steps.push.outputs.digest }}
         run: printf '%s\n' "$IMAGE" >> "$GITHUB_STEP_SUMMARY"
 
       # Deploys the image: infra merges the pin once its checks pass (see AGENTS.md).
-      - if: github.event_name == 'push'
-        id: app
+      - id: app
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.INFRA_BUMP_CLIENT_ID }}
@@ -83,14 +89,12 @@ jobs:
           repositories: infra
           permission-contents: write
           permission-pull-requests: write
-      - if: github.event_name == 'push'
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           repository: davidorbelian/infra
           token: ${{ steps.app.outputs.token }}
           path: infra
-      - if: github.event_name == 'push'
-        name: Pin the image in infra
+      - name: Pin the image in infra
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           APP_SLUG: ${{ steps.app.outputs.app-slug }}
