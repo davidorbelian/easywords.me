@@ -16,7 +16,7 @@ voices and rules in the code are only the first version.
 - `src/shared` holds rules both sides use: limits and the check of an edited set of personalities.
 - Rewrites come from Claude Sonnet through the Claude Agent SDK, with a subscription token from `claude setup-token`.
   The SDK starts the bundled `claude` binary for each rewrite, with no tools and no settings files.
-  Its system prompt is the shared rules, then the personality's prompt.
+  Its system prompt is the shared rules, then the personality's prompt, then its examples.
 - Personalities live in `DATA_DIR/personalities.json`: the last 50 saved versions, each with all personalities and the
   shared rules. The newest version is live. With no file, `src/server/seed.json` becomes version 1, like any save,
   and after that the file is the only truth. A personality's id comes from its name when it is made and never changes.
@@ -24,6 +24,10 @@ voices and rules in the code are only the first version.
 - A personality may keep `messages`: chat messages an admin pasted. `POST /api/admin/build` asks Claude to write a
   name and a prompt in their voice, and the admin edits, tries and saves it. Rewrites never see the messages.
   They stay so an admin can paste more later and build again.
+- A personality may keep up to 3 `examples`: a text and a rewrite it got right. An admin keeps one from Try and may
+  edit it. Every rewrite sees them after the prompt, told to copy the voice and never the facts.
+  Versions saved before examples have none. An older image reads them but drops them on its next save.
+- Each personality has its own Try box on the admin page, kept in the page only and never saved.
 - The server fills the personality buttons and the Admin link into `index.html`, so the page needs no extra request.
 - The admin page `/admin` is on only when `ADMIN_HASSWORD` is set. It works like Gentilik's: one shared hassword,
   then a signed session cookie for 30 days, with the key in `DATA_DIR/admin-key.json`. A new hassword signs everyone

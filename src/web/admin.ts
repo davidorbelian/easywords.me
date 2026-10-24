@@ -1,5 +1,7 @@
 import {
   checkDraft,
+  MAX_EXAMPLE_CHARS,
+  MAX_EXAMPLES,
   MAX_INPUT_CHARS,
   MAX_MESSAGES_CHARS,
   MAX_NAME_CHARS,
@@ -7,6 +9,7 @@ import {
   MAX_PROMPT_CHARS,
   MAX_RULES_CHARS,
   type Draft,
+  type Example,
   type Personality,
   type Version,
 } from "../shared/rules.ts";
@@ -14,10 +17,21 @@ import { readEvents } from "./events.ts";
 
 type ScoreState = { state: "empty" | "loading" | "failed" } | { state: "ready"; value: number };
 
-/** What a personality's Try box holds. It stays in this page and is never saved. */
-type Trial = { sample: string; result: string; score: ScoreState };
+/**
+ * What a personality's Try box holds. It stays in this page and is never saved.
+ * `source` is the sample the result was made from, which may differ from the sample once it is edited.
+ */
+type Trial = { sample: string; source: string; result: string; score: ScoreState };
 
-type Item = { key: number; id?: string; name: string; prompt: string; messages: string; trial: Trial };
+type Item = {
+  key: number;
+  id?: string;
+  name: string;
+  prompt: string;
+  messages: string;
+  examples: Example[];
+  trial: Trial;
+};
 
 /** What the middle panel shows: the shared rules, or the personality with this key. */
 type Selected = "rules" | number;
@@ -54,6 +68,9 @@ const messages = element<HTMLTextAreaElement>("messages");
 const messagesCount = element<HTMLSpanElement>("messages-count");
 const build = element<HTMLButtonElement>("build");
 const buildStatus = element<HTMLSpanElement>("build-status");
+const examplesCount = element<HTMLSpanElement>("examples-count");
+const examplesEmpty = element<HTMLParagraphElement>("examples-empty");
+const exampleList = element<HTMLOListElement>("examples");
 
 const tryName = element<HTMLSpanElement>("try-name");
 const tryInput = element<HTMLTextAreaElement>("try-input");
@@ -61,6 +78,7 @@ const tryOutput = element<HTMLTextAreaElement>("try-output");
 const tryScore = element<HTMLOutputElement>("try-score");
 const tryButton = element<HTMLButtonElement>("try");
 const tryStatus = element<HTMLSpanElement>("try-status");
+const keep = element<HTMLButtonElement>("keep");
 const versionList = element<HTMLOListElement>("versions");
 
 const savebar = element<HTMLDivElement>("savebar");
@@ -90,8 +108,8 @@ const timeFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", tim
 function draft(): Draft {
   return {
     rules: rules.value,
-    personalities: items.map(({ id, name, prompt, messages }) =>
-      id ? { id, name, prompt, messages } : { name, prompt, messages },
+    personalities: items.map(({ id, name, prompt, messages, examples }) =>
+      id ? { id, name, prompt, messages, examples } : { name, prompt, messages, examples },
     ),
   };
 }
@@ -105,7 +123,13 @@ function dirty(): boolean {
 
 function changed(item: Item): boolean {
   const live = versions[0]?.personalities.find((personality) => personality.id === item.id);
-  return !live || live.name !== item.name || live.prompt !== item.prompt || live.messages !== item.messages;
+  return (
+    !live ||
+    live.name !== item.name ||
+    live.prompt !== item.prompt ||
+    live.messages !== item.messages ||
+    JSON.stringify(live.examples) !== JSON.stringify(item.examples)
+  );
 }
 
 function current(): Item | undefined {
@@ -137,7 +161,7 @@ function fit(area: HTMLTextAreaElement): void {
 }
 
 function emptyTrial(): Trial {
-  return { sample: "", result: "", score: { state: "empty" } };
+  return { sample: "", source: "", result: "", score: { state: "empty" } };
 }
 
 /**
@@ -153,6 +177,8 @@ function useVersion(version: Version, saved = false): void {
   rules.value = version.rules;
   items = version.personalities.map((personality: Personality, index) => ({
     ...personality,
+    // Copies, so editing an example never edits the saved version it came from.
+    examples: personality.examples.map((example) => ({ ...example })),
     key: nextKey++,
     trial: find(personality, index)?.trial ?? emptyTrial(),
   }));
@@ -233,6 +259,61 @@ function renderPanel(): void {
   messages.value = item.messages;
   fit(prompt);
   fit(messages);
+  renderExamples(item);
+}
+
+function renderExamples(item: Item): void {
+  examplesEmpty.hidden = item.examples.length > 0;
+  exampleList.replaceChildren(
+    ...item.examples.map((example, index) => {
+      const row = document.createElement("li");
+      row.className = "example";
+      const head = document.createElement("div");
+      head.className = "field-head";
+      const title = document.createElement("span");
+      title.className = "example-title";
+      title.textContent = `Example ${index + 1}`;
+      const drop = document.createElement("button");
+      drop.type = "button";
+      drop.className = "copy";
+      drop.textContent = "Remove";
+      drop.ariaLabel = `Remove example ${index + 1}`;
+      drop.addEventListener("click", () => {
+        item.examples.splice(index, 1);
+        renderExamples(item);
+        edited(item);
+      });
+      head.append(title, drop);
+      row.append(
+        head,
+        exampleArea(item, example, "text", `Example ${index + 1} text`, "The text"),
+        exampleArea(item, example, "rewrite", `Example ${index + 1} rewrite`, "Its rewrite"),
+      );
+      return row;
+    }),
+  );
+  for (const area of exampleList.querySelectorAll("textarea")) fit(area);
+}
+
+function exampleArea(
+  item: Item,
+  example: Example,
+  field: keyof Example,
+  label: string,
+  placeholder: string,
+): HTMLTextAreaElement {
+  const area = document.createElement("textarea");
+  area.ariaLabel = label;
+  area.placeholder = placeholder;
+  area.spellcheck = false;
+  area.maxLength = MAX_EXAMPLE_CHARS;
+  area.value = example[field];
+  area.addEventListener("input", () => {
+    example[field] = area.value;
+    fit(area);
+    edited(item);
+  });
+  return area;
 }
 
 /** Shows the Try box of the personality Try uses. */
@@ -298,6 +379,7 @@ function update(): void {
   if (item) {
     count(promptCount, item.prompt.length, MAX_PROMPT_CHARS);
     count(messagesCount, item.messages.length, MAX_MESSAGES_CHARS);
+    count(examplesCount, item.examples.length, MAX_EXAMPLES);
     build.disabled = building !== undefined;
     build.querySelector(".run-label")!.textContent =
       building === item.key ? "Building…" : item.prompt.trim() ? "Rebuild prompt" : "Build prompt";
@@ -306,6 +388,13 @@ function update(): void {
   const target = tried();
   tryName.textContent = target ? `as ${label(target)}` : "";
   tryButton.disabled = !target || tryRequest !== undefined;
+  const trial = target?.trial;
+  keep.disabled =
+    !target ||
+    !trial?.result.trim() ||
+    trying === trial ||
+    target.examples.length >= MAX_EXAMPLES ||
+    target.examples.some((example) => example.text === trial.source && example.rewrite === trial.result);
 
   const unsaved = dirty();
   savebar.hidden = !unsaved && !note;
@@ -374,7 +463,7 @@ async function load(keepDraft: boolean): Promise<void> {
 }
 
 function addPersonality(): void {
-  const item: Item = { key: nextKey++, name: "", prompt: "", messages: "", trial: emptyTrial() };
+  const item: Item = { key: nextKey++, name: "", prompt: "", messages: "", examples: [], trial: emptyTrial() };
   items.push(item);
   select(item.key);
   edited();
@@ -588,6 +677,7 @@ tryButton.addEventListener("click", async () => {
     showResult(trial);
     if (status !== undefined) showStatus(tryStatus, status, tone);
   };
+  trial.source = text;
   trial.result = "";
   show({ state: "empty" }, "Trying…");
   update();
@@ -595,7 +685,7 @@ tryButton.addEventListener("click", async () => {
     const response = await api(
       "POST",
       "/api/admin/try",
-      { rules: rules.value, prompt: item.prompt, text },
+      { rules: rules.value, prompt: item.prompt, examples: item.examples, text },
       request.signal,
     );
     if (!response.ok) {
@@ -629,6 +719,24 @@ tryButton.addEventListener("click", async () => {
     trying = undefined;
     update();
   }
+});
+
+keep.addEventListener("click", () => {
+  const item = tried();
+  if (!item) return;
+  const { source, result } = item.trial;
+  if (source.length > MAX_EXAMPLE_CHARS || result.length > MAX_EXAMPLE_CHARS) {
+    showStatus(
+      tryStatus,
+      `An example keeps at most ${MAX_EXAMPLE_CHARS.toLocaleString("en")} characters of text and of rewrite.`,
+      "error",
+    );
+    return;
+  }
+  item.examples.push({ text: source, rewrite: result });
+  if (current() === item) renderExamples(item);
+  edited(item);
+  showStatus(tryStatus, "Kept as an example. Visitors get it once you save.");
 });
 
 tryInput.addEventListener("input", () => {

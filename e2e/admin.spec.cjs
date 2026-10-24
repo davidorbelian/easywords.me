@@ -143,6 +143,34 @@ test("each personality keeps its own Try box, also after a save", async ({ page 
   await expect(page.getByLabel("Sample text")).toHaveValue("Teacher's own sample.");
 });
 
+test("a result that came out right is kept as an example, used by Try, saved and removed", async ({ page }) => {
+  await signIn(page);
+  const keep = page.getByRole("button", { name: "Keep as example" });
+  await expect(keep).toBeDisabled();
+  await expect(page.locator("#examples-empty")).toBeVisible();
+
+  await promptField(page).fill("Voice: FAKE_REPLY:Cat sat.");
+  await page.getByLabel("Sample text").fill(HARD);
+  await page.getByRole("button", { name: "Try", exact: true }).click();
+  await expect(page.getByLabel("Result")).toHaveValue("Cat sat.");
+  await keep.click();
+  await expect(page.getByLabel("Example 1 text")).toHaveValue(HARD);
+  await expect(page.getByLabel("Example 1 rewrite")).toHaveValue("Cat sat.");
+  await expect(keep).toBeDisabled();
+  await page.getByLabel("Example 1 rewrite").fill("A cat sat.");
+
+  const sent = page.waitForRequest("**/api/admin/try");
+  await page.getByRole("button", { name: "Try", exact: true }).click();
+  expect((await sent).postDataJSON().examples).toEqual([{ text: HARD, rewrite: "A cat sat." }]);
+
+  await save(page);
+  await page.reload();
+  await expect(page.getByLabel("Example 1 rewrite")).toHaveValue("A cat sat.");
+  await page.getByRole("button", { name: "Remove example 1" }).click();
+  await expect(page.locator("#examples-empty")).toBeVisible();
+  await save(page);
+});
+
 test("personalities can be added, moved and removed", async ({ page }) => {
   await signIn(page);
   await page.getByRole("button", { name: "+ New personality" }).click();
