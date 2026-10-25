@@ -8,6 +8,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { streamSSE } from "hono/streaming";
 import {
   checkDraft,
+  checkExamples,
   MAX_INPUT_CHARS,
   MAX_MESSAGES_CHARS,
   MAX_NAME_CHARS,
@@ -134,7 +135,7 @@ export function createApp({ scorer, rewriter, limits, store, admin, webRoot }: A
     if (wait > 0) return c.json({ error: "slow_down", retryAfter: wait }, 429, { "Retry-After": String(wait) });
     if (!limits.daily.take()) return c.json({ error: "daily_limit" }, 429);
 
-    return rewrite(c, text, systemPrompt(store.current().rules, personality.prompt));
+    return rewrite(c, text, systemPrompt(store.current().rules, personality.prompt, personality.examples));
   });
 
   if (admin) adminRoutes(admin);
@@ -205,14 +206,16 @@ export function createApp({ scorer, rewriter, limits, store, admin, webRoot }: A
 
     // Tries a personality that is not saved yet. The admin is not held to the per-IP and daily limits.
     app.post("/api/admin/try", async (c) => {
-      const body = (await readJson(c)) as { rules?: unknown; prompt?: unknown } | undefined;
+      const body = (await readJson(c)) as { rules?: unknown; prompt?: unknown; examples?: unknown } | undefined;
       const text = readText(body);
       if (typeof text !== "string") return c.json({ error: text.error }, 400);
       const { rules, prompt } = body ?? {};
       if (typeof rules !== "string" || rules.length > MAX_RULES_CHARS) return c.json({ error: "bad_rules" }, 400);
       if (typeof prompt !== "string" || !prompt.trim() || prompt.length > MAX_PROMPT_CHARS)
         return c.json({ error: "bad_prompt" }, 400);
-      return rewrite(c, text, systemPrompt(rules, prompt));
+      const examples = checkExamples(body?.examples, "");
+      if (typeof examples === "string") return c.json({ error: "bad_examples" }, 400);
+      return rewrite(c, text, systemPrompt(rules, prompt, examples));
     });
 
     // Writes a name and a prompt in the voice of the messages. Nothing is saved until the admin saves.

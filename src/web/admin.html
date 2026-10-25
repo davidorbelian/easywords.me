@@ -39,7 +39,6 @@
           <ol id="pick-list" class="pick-list"></ol>
           <div class="picker-actions">
             <button id="add" class="pick pick-add" type="button">+ New personality</button>
-            <button id="add-from-messages" class="pick pick-add" type="button">+ From messages</button>
           </div>
         </nav>
 
@@ -94,6 +93,18 @@
               <button id="build" class="run" type="button"><span class="run-label">Build prompt</span></button>
             </div>
           </div>
+
+          <div class="field examples">
+            <div class="field-head">
+              <h3 id="examples-title" class="field-title">Examples</h3>
+              <span id="examples-count" class="count"></span>
+            </div>
+            <p class="hint">
+              Rewrites this personality got right. Every rewrite sees them, to copy the voice, never the facts.
+            </p>
+            <p id="examples-empty" class="hint">None yet. Try a text, then keep a result that came out right.</p>
+            <ol id="examples" class="example-list" aria-labelledby="examples-title"></ol>
+          </div>
         </section>
 
         <aside class="side">
@@ -120,8 +131,11 @@
               class="try-text"
               aria-label="Result"
               readonly
-              placeholder="The result shows up here. Nothing is saved."
+              placeholder="The result shows up here. Nothing is saved unless you keep it."
             ></textarea>
+            <div class="card-foot">
+              <button id="keep" class="copy" type="button">Keep as example</button>
+            </div>
           </section>
 
           <section class="card" aria-labelledby="versions-title">

@@ -105,6 +105,26 @@ describe("POST /api/simplify", () => {
     expect(seen).toBe(`${rules}\n\n${personalities[2]!.prompt}`);
   });
 
+  it("gives the rewriter the personality's examples after its prompt", async () => {
+    let seen = "";
+    const spy: Rewriter = async function* (_text, system) {
+      seen = system;
+      yield "x";
+    };
+    const examples = [{ text: " Hard. ", rewrite: "Arr." }];
+    await store.save(
+      { rules: "Rules.", personalities: [{ name: "Pirate", prompt: "Voice.", messages: "", examples }] },
+      1,
+    );
+    await (await app({ rewriter: spy }).request(post("/api/simplify", { text: "a", personality: "pirate" }))).text();
+    expect(seen).toBe(
+      "Rules.\n\nVoice.\n\n" +
+        "Rewrites this personality got right. Copy their voice, length and structure.\n" +
+        "They are about other texts, so never take facts from them.\n" +
+        "<example>\n<original>\nHard.\n</original>\n<rewrite>\nArr.\n</rewrite>\n</example>",
+    );
+  });
+
   it("rejects an unknown personality", async () => {
     const response = await app().request(post("/api/simplify", { text: "a", personality: "hardest" }));
     expect(response.status).toBe(400);
@@ -323,6 +343,25 @@ describe("admin", () => {
     expect(await response.text()).toContain('event: done\ndata: {"score":4}');
     expect(seen).toBe("Rules.\n\nVoice: a pirate.");
     expect(store.current().number).toBe(1);
+  });
+
+  it("tries a prompt with examples that are not saved yet, and refuses broken ones", async () => {
+    let seen = "";
+    const spy: Rewriter = async function* (_text, system) {
+      seen = system;
+      yield "Arr.";
+    };
+    const { instance, cookie, token } = await signIn(app({ rewriter: spy }));
+    const headers = { Cookie: cookie, "X-Form-Token": token };
+    const body = { rules: "Rules.", prompt: "Voice.", text: "Hello." };
+    const examples = [{ text: "Hard.", rewrite: "Arr." }];
+    await (await instance.request(post("/api/admin/try", { ...body, examples }, "1.2.3.4", headers))).text();
+    expect(seen).toContain("Voice.\n\nRewrites this personality got right.");
+    expect(seen).toContain("<original>\nHard.\n</original>\n<rewrite>\nArr.\n</rewrite>");
+
+    const broken = await instance.request(post("/api/admin/try", { ...body, examples: [{}] }, "1.2.3.4", headers));
+    expect(broken.status).toBe(400);
+    expect(await broken.json()).toEqual({ error: "bad_examples" });
   });
 
   describe("POST /api/admin/build", () => {

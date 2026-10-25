@@ -1,6 +1,6 @@
 import { mkdir, open, readFile, rename } from "node:fs/promises";
 import { join } from "node:path";
-import type { Draft, Settings, Personality, Version } from "../shared/rules.ts";
+import type { Draft, Example, Settings, Personality, Version } from "../shared/rules.ts";
 import seed from "./seed.json" with { type: "json" };
 
 export const KEEP_VERSIONS = 50;
@@ -70,13 +70,13 @@ export class PersonalityStore {
 /** Gives each new personality an id made from its name, unique among the others. */
 export function withIds(draft: Draft): Settings {
   const taken = new Set(draft.personalities.flatMap((personality) => (personality.id ? [personality.id] : [])));
-  const personalities = draft.personalities.map(({ id, name, prompt, messages }) => {
-    if (id) return { id, name, prompt, messages };
+  const personalities = draft.personalities.map(({ id, name, prompt, messages, examples = [] }) => {
+    if (id) return { id, name, prompt, messages, examples };
     const base = slug(name) || "personality";
     let unique = base;
     for (let n = 2; taken.has(unique); n++) unique = `${base}-${n}`;
     taken.add(unique);
-    return { id: unique, name, prompt, messages };
+    return { id: unique, name, prompt, messages, examples };
   });
   return { rules: draft.rules, personalities };
 }
@@ -108,16 +108,23 @@ function parse(text: string, file: string): Version[] {
             typeof personality.id === "string" &&
             typeof personality.name === "string" &&
             typeof personality.prompt === "string" &&
-            (personality.messages === undefined || typeof personality.messages === "string"),
+            (personality.messages === undefined || typeof personality.messages === "string") &&
+            (personality.examples === undefined ||
+              (Array.isArray(personality.examples) &&
+                personality.examples.every(
+                  (example: Partial<Example> | undefined) =>
+                    typeof example?.text === "string" && typeof example.rewrite === "string",
+                ))),
         ),
     );
   if (!valid) throw new Error(`${file} is not a list of personality versions`);
-  // Versions saved before messages were kept have none.
+  // Versions saved before messages or examples were kept have none.
   return (versions as Version[]).map((version) => ({
     ...version,
     personalities: version.personalities.map((personality) => ({
       ...personality,
       messages: personality.messages ?? "",
+      examples: personality.examples ?? [],
     })),
   }));
 }

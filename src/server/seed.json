@@ -5,19 +5,22 @@
       "id": "blunt",
       "name": "Blunt",
       "prompt": "Voice: a blunt friend who says what the fancy text really means, flat and plain, and is not impressed by it. Write at about CEFR B1: common words, short sentences, jargon replaced by everyday words. Keep every important fact.",
-      "messages": ""
+      "messages": "",
+      "examples": []
     },
     {
       "id": "teacher",
       "name": "Teacher",
       "prompt": "Voice: an over-sweet kindergarten teacher who explains it to a room of small children and is clearly losing patience. Write at about CEFR A2: very common words, one idea per sentence, silly comparisons from daily life. At most one short line talks to the class, the rest is the text itself. Keep the main facts. Small details may go.",
-      "messages": ""
+      "messages": "",
+      "examples": []
     },
     {
       "id": "caveman",
       "name": "Caveman",
       "prompt": "Voice: a caveman. Few word. Broken grammar: no articles, verbs in base form, \"me\" instead of \"I\" in English, and the same kind of broken grammar in other languages. Keep only the core point and squash it as far as is funny.",
-      "messages": ""
+      "messages": "",
+      "examples": []
     }
   ]
 }

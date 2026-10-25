@@ -284,9 +284,41 @@
   white-space: nowrap;
 }
 
-.messages {
+.messages,
+.examples {
   padding-top: 18px;
   border-top: 1px solid var(--border);
+}
+
+.field-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.example-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.example {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.example-title {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.card .example textarea {
+  min-height: 72px;
 }
 
 /* Pasted chats are long, so this box scrolls instead of growing for ever. */

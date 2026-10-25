@@ -20,10 +20,17 @@ describe("PersonalityStore", () => {
   it("reads the saved versions back", async () => {
     const dir = await temporary();
     const store = await PersonalityStore.open(dir);
-    await store.save({ rules: "r", personalities: [{ name: "Pirate", prompt: "Arr.", messages: "" }] }, 1);
+    const examples = [{ text: "Hard.", rewrite: "Easy." }];
+    await store.save({ rules: "r", personalities: [{ name: "Pirate", prompt: "Arr.", messages: "", examples }] }, 1);
     const again = await PersonalityStore.open(dir);
     expect(again.versions().map((version) => version.number)).toEqual([2, 1]);
-    expect(again.personality("pirate")).toEqual({ id: "pirate", name: "Pirate", prompt: "Arr.", messages: "" });
+    expect(again.personality("pirate")).toEqual({
+      id: "pirate",
+      name: "Pirate",
+      prompt: "Arr.",
+      messages: "",
+      examples,
+    });
   });
 
   it(`keeps the last ${KEEP_VERSIONS} versions`, async () => {
@@ -43,7 +50,7 @@ describe("PersonalityStore", () => {
     expect(store.current().number).toBe(2);
   });
 
-  it("reads versions saved before messages were kept as having none", async () => {
+  it("reads versions saved before messages and examples were kept as having none", async () => {
     const dir = await temporary();
     const version = { number: 3, savedAt: "2026-10-22T00:00:00.000Z", rules: "r" };
     await writeFile(
@@ -55,12 +62,25 @@ describe("PersonalityStore", () => {
       name: "A",
       prompt: "p",
       messages: "",
+      examples: [],
     });
   });
 
   it("refuses to start on a broken file", async () => {
     const dir = await temporary();
     await writeFile(join(dir, "personalities.json"), JSON.stringify({ versions: [{ number: 1 }] }));
+    await expect(PersonalityStore.open(dir)).rejects.toThrow(/not a list of personality versions/);
+  });
+
+  it("refuses to start on broken examples", async () => {
+    const dir = await temporary();
+    const personality = { id: "a", name: "A", prompt: "p", messages: "", examples: [{ text: "t" }] };
+    await writeFile(
+      join(dir, "personalities.json"),
+      JSON.stringify({
+        versions: [{ number: 1, savedAt: "2026-10-22T00:00:00.000Z", rules: "r", personalities: [personality] }],
+      }),
+    );
     await expect(PersonalityStore.open(dir)).rejects.toThrow(/not a list of personality versions/);
   });
 
@@ -85,7 +105,7 @@ describe("PersonalityStore", () => {
     await writeFile(join(dir, "styles.json"), old);
     const store = await PersonalityStore.open(dir);
     expect(store.versions().map((version) => version.number)).toEqual([7, 6]);
-    expect(store.personality("b")).toEqual({ id: "b", name: "B", prompt: "q", messages: "" });
+    expect(store.personality("b")).toEqual({ id: "b", name: "B", prompt: "q", messages: "", examples: [] });
     await store.save({ rules: "r", personalities: [{ name: "C", prompt: "p", messages: "" }] }, 7);
     expect((await PersonalityStore.open(dir)).current().number).toBe(8);
     expect(await readFile(join(dir, "styles.json"), "utf8")).toBe(old);
@@ -143,17 +163,47 @@ describe("checkDraft", () => {
     [{ name: "Teacher", messages: "m".repeat(20001) }, 'The messages of "Teacher" are longer than 20,000 characters.'],
     [{ name: "Teacher", messages: undefined }, "Personality 2 is broken."],
     [{ name: "Teacher", id: "Bad Id" }, "Personality 2 has a broken id."],
+    [{ name: "Teacher", examples: "e" }, 'The examples of "Teacher" are broken.'],
+    [
+      { name: "Teacher", examples: Array.from({ length: 4 }, () => ({ text: "t", rewrite: "r" })) },
+      'Keep at most 3 examples for "Teacher".',
+    ],
+    [{ name: "Teacher", examples: [{ text: "t" }] }, 'Example 1 of "Teacher" is broken.'],
+    [
+      {
+        name: "Teacher",
+        examples: [
+          { text: "t", rewrite: "r" },
+          { text: "t", rewrite: " " },
+        ],
+      },
+      'Example 2 of "Teacher" needs both the text and the rewrite.',
+    ],
+    [
+      { name: "Teacher", examples: [{ text: "t".repeat(2001), rewrite: "r" }] },
+      'Example 1 of "Teacher" is longer than 2,000 characters.',
+    ],
   ])("refuses a second personality like %j, and says which one", (second, error) => {
     const draft = { rules: "", personalities: [personality, { ...personality, ...second }] };
     expect(checkDraft(draft)).toEqual({ error, index: 1 });
   });
 
-  it("trims names and keeps ids and messages", () => {
+  it("trims names and keeps ids, messages and examples", () => {
+    const examples = [{ text: " t ", rewrite: " r " }];
     expect(
-      checkDraft({ rules: "r", personalities: [{ id: "blunt", name: " Blunt ", prompt: "p", messages: " m " }] }),
+      checkDraft({
+        rules: "r",
+        personalities: [
+          { id: "blunt", name: " Blunt ", prompt: "p", messages: " m ", examples },
+          { name: "Teacher", prompt: "p", messages: "" },
+        ],
+      }),
     ).toEqual({
       rules: "r",
-      personalities: [{ id: "blunt", name: "Blunt", prompt: "p", messages: " m " }],
+      personalities: [
+        { id: "blunt", name: "Blunt", prompt: "p", messages: " m ", examples },
+        { name: "Teacher", prompt: "p", messages: "", examples: [] },
+      ],
     });
   });
 });

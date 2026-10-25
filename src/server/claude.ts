@@ -1,11 +1,25 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import type { Example } from "../shared/rules.ts";
 
 export type Rewriter = (text: string, systemPrompt: string, signal: AbortSignal) => AsyncIterable<string>;
 
 const MODEL = "claude-sonnet-5-5";
 
-export function systemPrompt(rules: string, personalityPrompt: string): string {
-  return [rules.trim(), personalityPrompt.trim()].filter(Boolean).join("\n\n");
+/** The shared rules, the personality's prompt, then the rewrites it got right. */
+export function systemPrompt(rules: string, personalityPrompt: string, examples: Example[] = []): string {
+  return [rules.trim(), personalityPrompt.trim(), examplesPrompt(examples)].filter(Boolean).join("\n\n");
+}
+
+function examplesPrompt(examples: Example[]): string {
+  if (examples.length === 0) return "";
+  return [
+    "Rewrites this personality got right. Copy their voice, length and structure.",
+    "They are about other texts, so never take facts from them.",
+    ...examples.map(
+      ({ text, rewrite }) =>
+        `<example>\n<original>\n${text.trim()}\n</original>\n<rewrite>\n${rewrite.trim()}\n</rewrite>\n</example>`,
+    ),
+  ].join("\n");
 }
 
 export function createClaudeRewriter(oauthToken: string, baseUrl: string | undefined): Rewriter {
